@@ -1,0 +1,203 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+  <title>NTPC CSR Dashboard 2023-24</title>
+
+  <!-- Chart.js -->
+  <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.min.js"></script>
+
+  <!-- Basic styles -->
+  <style>
+    :root {
+      --bg: #0f0f10;
+      --panel: #1c1c21;
+      --text: #f5f7fb;
+      --muted: #98a2b3;
+      --accent: #ffcc00;
+    }
+    * { box-sizing: border-box; }
+    body {
+      margin: 0; background: var(--bg); color: var(--text);
+      font-family: system-ui, -apple-system, Segoe UI, Roboto, Arial, sans-serif;
+    }
+    header {
+      padding: 22px 20px; text-align: center; border-bottom: 1px solid #24242a;
+    }
+    header h1 { margin: 0; font-size: 24px; color: var(--accent); }
+
+    .container { max-width: 1200px; margin: 0 auto; padding: 18px; }
+
+    .kpis {
+      display: grid; grid-template-columns: repeat(3, 1fr); gap: 16px; margin-bottom: 18px;
+    }
+    .card {
+      background: var(--panel); border-radius: 14px; padding: 18px;
+      box-shadow: 0 6px 18px rgba(0,0,0,0.35);
+    }
+    .kpi-label { color: var(--muted); font-size: 13px; text-transform: uppercase; letter-spacing: .06em; }
+    .kpi-value { margin-top: 8px; font-size: 28px; font-weight: 700; }
+
+    .grid {
+      display: grid; grid-template-columns: 1fr; gap: 16px;
+    }
+    @media (min-width: 900px) {
+      .grid { grid-template-columns: 1fr 1fr; }
+    }
+
+    canvas {
+      width: 100% !important;
+      height: 360px !important;
+      background: var(--panel);
+      border-radius: 14px;
+      padding: 12px;
+      box-shadow: 0 6px 18px rgba(0,0,0,0.35);
+    }
+
+    .note { color: var(--muted); font-size: 12px; margin-top: 10px; text-align: center; }
+    a { color: #7dd3fc; text-decoration: none; }
+  </style>
+</head>
+<body>
+  <header>
+    <h1>NTPC CSR Spending Dashboard (2023–24)</h1>
+  </header>
+
+  <div class="container">
+    <!-- KPI CARDS -->
+    <section class="kpis">
+      <div class="card">
+        <div class="kpi-label">Total Amount Spent (₹ Cr)</div>
+        <div class="kpi-value" id="kpi-total">—</div>
+      </div>
+      <div class="card">
+        <div class="kpi-label">Number of CSR Projects</div>
+        <div class="kpi-value" id="kpi-projects">—</div>
+      </div>
+      <div class="card">
+        <div class="kpi-label">Number of States</div>
+        <div class="kpi-value" id="kpi-states">—</div>
+      </div>
+    </section>
+
+    <!-- CHARTS -->
+    <section class="grid">
+      <div>
+        <canvas id="sectorChart"></canvas>
+      </div>
+      <!-- (reserved for next charts like Mode / Map) -->
+      <div class="card" style="display:flex;align-items:center;justify-content:center;height:360px;">
+        More charts coming next: Mode of Implementation, State Map, and State table.
+      </div>
+    </section>
+
+    <p class="note">
+      This page reads <code>csr_data.csv</code> from the same folder. If you host on GitHub Pages,
+      just push both <code>index.html</code> and <code>csr_data.csv</code> to your repo.
+    </p>
+  </div>
+
+  <script>
+    // Helper: parse "₹ 0.02" -> 0.02 (number)
+    function parseAmount(str) {
+      if (str == null) return 0;
+      // remove currency symbol, commas, spaces; keep digits and dot
+      const cleaned = String(str).replace(/[^\d.]/g, '');
+      const n = parseFloat(cleaned);
+      return isNaN(n) ? 0 : n;
+    }
+
+    // Load CSV, compute KPIs + build charts
+    async function init() {
+      // Load CSV text (must be same-folder path)
+      const resp = await fetch('csr_data.csv');
+      const text = await resp.text();
+
+      // Parse simple CSV (no library) – split lines, assume first row is header
+      const lines = text.split(/\r?\n/).filter(l => l.trim().length);
+      const header = lines[0].split(',').map(h => h.trim());
+      const rows = lines.slice(1).map(line => {
+        // robust split: split by comma but keep commas inside quotes
+        const cols = [];
+        let cur = '', inQ = false;
+        for (let i = 0; i < line.length; i++) {
+          const ch = line[i];
+          if (ch === '"') { inQ = !inQ; continue; }
+          if (ch === ',' && !inQ) { cols.push(cur); cur = ''; }
+          else cur += ch;
+        }
+        cols.push(cur);
+        const obj = {};
+        header.forEach((h, i) => obj[h] = (cols[i] ?? '').trim());
+        return obj;
+      });
+
+      // Column names from your CSV:
+      const COL_SECTOR = 'Development Sector(s)';
+      const COL_STATE  = 'State';
+      const COL_AMOUNT = 'Amount Spent  (INR Cr.)';
+
+      // ----- KPIs -----
+      const totalAmount = rows.reduce((sum, r) => sum + parseAmount(r[COL_AMOUNT]), 0);
+      const totalProjects = rows.length;
+      const statesSet = new Set(rows.map(r => r[COL_STATE]).filter(Boolean));
+      const totalStates = statesSet.size;
+
+      document.getElementById('kpi-total').textContent   = totalAmount.toFixed(2);
+      document.getElementById('kpi-projects').textContent = totalProjects.toLocaleString();
+      document.getElementById('kpi-states').textContent   = totalStates.toString();
+
+      // ----- Sector Aggregation -----
+      const sectorTotals = {};
+      rows.forEach(r => {
+        const sector = r[COL_SECTOR] || 'Unknown';
+        const amt = parseAmount(r[COL_AMOUNT]);
+        sectorTotals[sector] = (sectorTotals[sector] || 0) + amt;
+      });
+
+      // Prepare data for Chart.js
+      const sectorLabels = Object.keys(sectorTotals);
+      const sectorValues = sectorLabels.map(k => +sectorTotals[k].toFixed(2));
+
+      // ----- Sector Pie Chart -----
+      const ctx = document.getElementById('sectorChart').getContext('2d');
+      new Chart(ctx, {
+        type: 'pie',
+        data: {
+          labels: sectorLabels,
+          datasets: [{
+            data: sectorValues,
+            // leave colors to Chart.js defaults for now (cleaner + accessible)
+          }]
+        },
+        options: {
+          plugins: {
+            title: {
+              display: true,
+              text: 'Amount Spent by Development Sector (₹ Cr)',
+              color: '#f5f7fb',
+              font: { size: 16, weight: '600' }
+            },
+            legend: {
+              position: 'bottom',
+              labels: { color: '#f5f7fb' }
+            },
+            tooltip: {
+              callbacks: {
+                label: (ctx) => `${ctx.label}: ₹ ${ctx.raw.toLocaleString(undefined,{minimumFractionDigits:2, maximumFractionDigits:2})} Cr`
+              }
+            }
+          }
+        }
+      });
+    }
+
+    // Kick off
+    init().catch(err => {
+      console.error(err);
+      alert('Failed to load csr_data.csv. Make sure it is in the same folder as index.html.');
+    });
+  </script>
+</body>
+</html>
