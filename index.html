@@ -22,23 +22,78 @@
       border-bottom: 2px solid #334155;
     }
     header h1 { margin: 0; color: #facc15; }
-    .container { max-width: 900px; margin: auto; padding: 20px; }
+    .dashboard {
+      display: grid;
+      gap: 20px;
+      padding: 20px;
+      grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
+    }
     .card {
       background: #1e293b;
       border-radius: 10px;
       padding: 20px;
+      text-align: center;
       box-shadow: 0 6px 12px rgba(0,0,0,0.3);
     }
+    .card h2 { margin: 0 0 10px 0; font-size: 18px; color: #93c5fd; }
+    .big-number {
+      font-size: 36px;
+      font-weight: bold;
+      color: #facc15;
+    }
+    table {
+      width: 100%;
+      border-collapse: collapse;
+      margin-top: 10px;
+      font-size: 14px;
+    }
+    th, td {
+      padding: 6px 8px;
+      border: 1px solid #334155;
+      text-align: left;
+    }
+    th { background: #334155; }
   </style>
 </head>
 <body>
   <header>
-    <h1>ONGC CSR Spending Dashboard (2024-25)</h1>
+    <h1>ONGC CSR Spending for 2024-25</h1>
   </header>
 
-  <div class="container">
+  <div class="dashboard">
     <div class="card">
+      <h2>Total Amount Spent in Crore</h2>
+      <div class="big-number" id="totalAmount">₹ 0</div>
+    </div>
+
+    <div class="card">
+      <h2>Number of CSR Projects</h2>
+      <div class="big-number" id="numProjects">0</div>
+    </div>
+
+    <div class="card">
+      <h2>Number of States</h2>
+      <div class="big-number" id="numStates">0</div>
+    </div>
+
+    <div class="card">
+      <h2>Amount Spent by Sector</h2>
+      <canvas id="sectorChart"></canvas>
+    </div>
+
+    <div class="card">
+      <h2>Amount Spent by State</h2>
       <canvas id="stateChart"></canvas>
+    </div>
+
+    <div class="card">
+      <h2>CSR Spending by State (Table)</h2>
+      <table id="stateTable">
+        <thead>
+          <tr><th>State</th><th>Amount (₹ Cr)</th></tr>
+        </thead>
+        <tbody></tbody>
+      </table>
     </div>
   </div>
 
@@ -70,54 +125,76 @@
         return obj;
       });
 
-      // 🔎 Auto-detect headers
+      // Detect columns
       function findCol(headers, keyword){
         return headers.find(h => h.toLowerCase().includes(keyword.toLowerCase()));
       }
-      const headers = Object.keys(rawRows[0] || {});
-      const COL_STATE  = findCol(headers, 'state');
-      const COL_AMOUNT = findCol(headers, 'amount');
-      const COL_YEAR   = findCol(headers, 'year');
+      const COL_STATE  = findCol(header, 'state');
+      const COL_AMOUNT = findCol(header, 'amount');
+      const COL_YEAR   = findCol(header, 'year');
+      const COL_SECTOR = findCol(header, 'sector');
 
+      const year = "2024-25";
       const allData = rawRows.map(r => ({
         State: r[COL_STATE],
+        Sector: r[COL_SECTOR],
         Amount: parseAmount(r[COL_AMOUNT]),
         Year: r[COL_YEAR]
       }));
-
-      // Filter only 2024-25
-      const year = "2024-25";
       const filtered = allData.filter(d => d.Year === year);
 
+      // Totals
+      const totalAmount = filtered.reduce((sum, d) => sum + d.Amount, 0);
+      const numProjects = filtered.length;
+      const numStates = new Set(filtered.map(d => d.State)).size;
+
+      document.getElementById('totalAmount').textContent = "₹ " + totalAmount.toFixed(2);
+      document.getElementById('numProjects').textContent = numProjects;
+      document.getElementById('numStates').textContent = numStates;
+
+      // State totals
       const stateTotals = {};
       filtered.forEach(d => {
         stateTotals[d.State] = (stateTotals[d.State] || 0) + d.Amount;
       });
 
-      const ctx = document.getElementById('stateChart').getContext('2d');
-      new Chart(ctx, {
+      const ctxState = document.getElementById('stateChart').getContext('2d');
+      new Chart(ctxState, {
         type: 'bar',
-        data: { 
-          labels: Object.keys(stateTotals), 
-          datasets: [{ 
-            label: 'CSR Spend (₹ Cr)', 
-            data: Object.values(stateTotals), 
-            backgroundColor: '#38bdf8' 
-          }] 
+        data: {
+          labels: Object.keys(stateTotals),
+          datasets: [{ label: 'Amount (₹ Cr)', data: Object.values(stateTotals), backgroundColor: '#38bdf8' }]
         },
-        options: {
-          plugins: { title: { display: true, text: 'CSR Spending by State - 2024-25', color:'#f8fafc' } },
-          scales: {
-            x: { ticks: { color: '#f8fafc' } },
-            y: { ticks: { color: '#f8fafc' } }
-          }
+        options: { plugins: { legend: { display: false } } }
+      });
+
+      // Fill table
+      const tbody = document.querySelector('#stateTable tbody');
+      Object.entries(stateTotals).forEach(([state, amt]) => {
+        const row = document.createElement('tr');
+        row.innerHTML = `<td>${state}</td><td>₹ ${amt.toFixed(2)}</td>`;
+        tbody.appendChild(row);
+      });
+
+      // Sector totals
+      const sectorTotals = {};
+      filtered.forEach(d => {
+        sectorTotals[d.Sector] = (sectorTotals[d.Sector] || 0) + d.Amount;
+      });
+
+      const ctxSector = document.getElementById('sectorChart').getContext('2d');
+      new Chart(ctxSector, {
+        type: 'doughnut',
+        data: {
+          labels: Object.keys(sectorTotals),
+          datasets: [{ data: Object.values(sectorTotals), backgroundColor: ['#38bdf8','#60a5fa','#a78bfa','#f472b6','#facc15','#4ade80','#f87171'] }]
         }
       });
     }
 
     init().catch(err => {
       console.error(err);
-      alert('Error loading data. Ensure csr_data.csv is in the same folder.');
+      alert('Error loading csr_data.csv');
     });
   </script>
 </body>
