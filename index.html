@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
-  <title>ONGC CSR Dashboard</title>
+  <title>ONGC CSR Dashboard 2024-25</title>
 
   <!-- Chart.js -->
   <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.min.js"></script>
@@ -22,43 +22,23 @@
       border-bottom: 2px solid #334155;
     }
     header h1 { margin: 0; color: #facc15; }
-    .container { max-width: 1200px; margin: auto; padding: 20px; }
-    .grid { display: grid; gap: 20px; }
-    @media(min-width: 900px) {
-      .grid { grid-template-columns: 1fr 1fr; }
-    }
+    .container { max-width: 900px; margin: auto; padding: 20px; }
     .card {
       background: #1e293b;
       border-radius: 10px;
       padding: 20px;
       box-shadow: 0 6px 12px rgba(0,0,0,0.3);
     }
-    select {
-      padding: 8px;
-      margin: 10px 0 20px 0;
-      border-radius: 6px;
-      border: none;
-      font-size: 14px;
-    }
   </style>
 </head>
 <body>
   <header>
-    <h1>ONGC CSR Spending Dashboard</h1>
+    <h1>ONGC CSR Spending Dashboard (2024-25)</h1>
   </header>
 
   <div class="container">
-    <!-- Year Filter -->
-    <label for="yearSelect">Select Year: </label>
-    <select id="yearSelect"></select>
-
-    <div class="grid">
-      <div class="card">
-        <canvas id="stateChart"></canvas>
-      </div>
-      <div class="card">
-        <canvas id="yearChart"></canvas>
-      </div>
+    <div class="card">
+      <canvas id="stateChart"></canvas>
     </div>
   </div>
 
@@ -90,7 +70,7 @@
         return obj;
       });
 
-      // 🔎 Auto-detect columns (case-insensitive match)
+      // 🔎 Auto-detect headers
       function findCol(headers, keyword){
         return headers.find(h => h.toLowerCase().includes(keyword.toLowerCase()));
       }
@@ -99,88 +79,40 @@
       const COL_AMOUNT = findCol(headers, 'amount');
       const COL_YEAR   = findCol(headers, 'year');
 
-      if (!COL_STATE || !COL_AMOUNT || !COL_YEAR) {
-        alert("CSV headers not found. Please check your file.");
-        console.error("Detected headers:", headers);
-        return;
-      }
-
       const allData = rawRows.map(r => ({
         State: r[COL_STATE],
         Amount: parseAmount(r[COL_AMOUNT]),
         Year: r[COL_YEAR]
       }));
 
-      // ✅ Only allow years like 2019-20, 2024-25
-      const yearPattern = /^\d{4}-\d{2}$/;
-      const years = [...new Set(allData.map(d=>d.Year))]
-        .filter(y => yearPattern.test(y))
-        .sort();
+      // Filter only 2024-25
+      const year = "2024-25";
+      const filtered = allData.filter(d => d.Year === year);
 
-      // Populate dropdown
-      const yearSelect = document.getElementById('yearSelect');
-      years.forEach(y => {
-        const opt = document.createElement('option');
-        opt.value = y;
-        opt.textContent = y;
-        yearSelect.appendChild(opt);
+      const stateTotals = {};
+      filtered.forEach(d => {
+        stateTotals[d.State] = (stateTotals[d.State] || 0) + d.Amount;
       });
 
-      // Charts
-      const stateCtx = document.getElementById('stateChart').getContext('2d');
-      const yearCtx = document.getElementById('yearChart').getContext('2d');
-
-      const stateChart = new Chart(stateCtx, {
+      const ctx = document.getElementById('stateChart').getContext('2d');
+      new Chart(ctx, {
         type: 'bar',
-        data: { labels: [], datasets: [{ label: 'CSR Spend (₹ Cr)', data: [], backgroundColor: '#38bdf8' }] },
+        data: { 
+          labels: Object.keys(stateTotals), 
+          datasets: [{ 
+            label: 'CSR Spend (₹ Cr)', 
+            data: Object.values(stateTotals), 
+            backgroundColor: '#38bdf8' 
+          }] 
+        },
         options: {
-          plugins: { title: { display: true, text: 'CSR Spending by State', color:'#f8fafc' } },
+          plugins: { title: { display: true, text: 'CSR Spending by State - 2024-25', color:'#f8fafc' } },
           scales: {
             x: { ticks: { color: '#f8fafc' } },
             y: { ticks: { color: '#f8fafc' } }
           }
         }
       });
-
-      const yearChart = new Chart(yearCtx, {
-        type: 'bar',
-        data: { labels: [], datasets: [{ label: 'Total CSR Spend (₹ Cr)', data: [], backgroundColor: '#60a5fa' }] },
-        options: {
-          plugins: { title: { display: true, text: 'Year-wise CSR Spending', color:'#f8fafc' } },
-          scales: {
-            x: { ticks: { color: '#f8fafc' } },
-            y: { ticks: { color: '#f8fafc' } }
-          }
-        }
-      });
-
-      function updateCharts(year) {
-        // State chart for selected year
-        const filtered = allData.filter(d => d.Year === year);
-        const stateTotals = {};
-        filtered.forEach(d => {
-          stateTotals[d.State] = (stateTotals[d.State] || 0) + d.Amount;
-        });
-
-        stateChart.data.labels = Object.keys(stateTotals);
-        stateChart.data.datasets[0].data = Object.values(stateTotals);
-        stateChart.update();
-
-        // Year-wise chart
-        const yearTotals = {};
-        allData.forEach(d => {
-          if (yearPattern.test(d.Year)) {
-            yearTotals[d.Year] = (yearTotals[d.Year] || 0) + d.Amount;
-          }
-        });
-
-        yearChart.data.labels = Object.keys(yearTotals).sort();
-        yearChart.data.datasets[0].data = Object.values(yearTotals);
-        yearChart.update();
-      }
-
-      yearSelect.addEventListener('change', e => updateCharts(e.target.value));
-      updateCharts(years[0]); // initialize
     }
 
     init().catch(err => {
