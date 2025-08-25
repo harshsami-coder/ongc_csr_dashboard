@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
-  <title>ONGC CSR Dashboard 2024-25</title>
+  <title>ONGC CSR Spending for 2024-25</title>
 
   <!-- Chart.js -->
   <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.min.js"></script>
@@ -22,11 +22,10 @@
       border-bottom: 2px solid #334155;
     }
     header h1 { margin: 0; color: #facc15; }
-    .dashboard {
-      display: grid;
-      gap: 20px;
-      padding: 20px;
-      grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
+    .container { max-width: 1200px; margin: auto; padding: 20px; }
+    .grid { display: grid; gap: 20px; }
+    @media(min-width: 900px) {
+      .grid { grid-template-columns: repeat(3, 1fr); }
     }
     .card {
       background: #1e293b;
@@ -35,9 +34,8 @@
       text-align: center;
       box-shadow: 0 6px 12px rgba(0,0,0,0.3);
     }
-    .card h2 { margin: 0 0 10px 0; font-size: 18px; color: #93c5fd; }
     .big-number {
-      font-size: 36px;
+      font-size: 2rem;
       font-weight: bold;
       color: #facc15;
     }
@@ -45,14 +43,14 @@
       width: 100%;
       border-collapse: collapse;
       margin-top: 10px;
-      font-size: 14px;
+      color: #f8fafc;
     }
     th, td {
-      padding: 6px 8px;
       border: 1px solid #334155;
+      padding: 8px;
       text-align: left;
     }
-    th { background: #334155; }
+    th { background: #0f172a; }
   </style>
 </head>
 <body>
@@ -60,142 +58,106 @@
     <h1>ONGC CSR Spending for 2024-25</h1>
   </header>
 
-  <div class="dashboard">
-    <div class="card">
-      <h2>Total Amount Spent in Crore</h2>
-      <div class="big-number" id="totalAmount">₹ 0</div>
+  <div class="container">
+    <div class="grid">
+      <div class="card">
+        <h3>Total Amount Spent in Crore</h3>
+        <div class="big-number" id="totalAmount">₹ 0.00</div>
+      </div>
+      <div class="card">
+        <h3>Number of CSR Projects</h3>
+        <div class="big-number" id="numProjects">0</div>
+      </div>
+      <div class="card">
+        <h3>Number of States</h3>
+        <div class="big-number" id="numStates">0</div>
+      </div>
     </div>
 
-    <div class="card">
-      <h2>Number of CSR Projects</h2>
-      <div class="big-number" id="numProjects">0</div>
-    </div>
-
-    <div class="card">
-      <h2>Number of States</h2>
-      <div class="big-number" id="numStates">0</div>
-    </div>
-
-    <div class="card">
-      <h2>Amount Spent by Sector</h2>
-      <canvas id="sectorChart"></canvas>
-    </div>
-
-    <div class="card">
-      <h2>Amount Spent by State</h2>
-      <canvas id="stateChart"></canvas>
-    </div>
-
-    <div class="card">
-      <h2>CSR Spending by State (Table)</h2>
-      <table id="stateTable">
-        <thead>
-          <tr><th>State</th><th>Amount (₹ Cr)</th></tr>
-        </thead>
-        <tbody></tbody>
-      </table>
+    <div class="grid">
+      <div class="card"><canvas id="sectorChart"></canvas></div>
+      <div class="card"><canvas id="stateChart"></canvas></div>
+      <div class="card">
+        <h3>CSR Spending by State (Table)</h3>
+        <table id="stateTable">
+          <thead><tr><th>State</th><th>Amount (₹ Cr)</th></tr></thead>
+          <tbody></tbody>
+        </table>
+      </div>
     </div>
   </div>
 
   <script>
-    function parseAmount(str) {
-      if (!str) return 0;
-      const cleaned = String(str).replace(/[^\d.]/g, '');
-      const n = parseFloat(cleaned);
-      return isNaN(n) ? 0 : n;
-    }
-
     async function init() {
       const resp = await fetch('csr_data.csv');
       const text = await resp.text();
-
       const lines = text.split(/\r?\n/).filter(l => l.trim().length);
+
       const header = lines[0].split(',').map(h => h.trim());
-      const rawRows = lines.slice(1).map(line => {
-        const cols = [];
-        let cur = '', inQ = false;
-        for (let ch of line) {
-          if (ch === '"') { inQ = !inQ; continue; }
-          if (ch === ',' && !inQ) { cols.push(cur); cur = ''; }
-          else cur += ch;
-        }
-        cols.push(cur);
+      const rows = lines.slice(1).map(line => {
+        const cols = line.split(',');
         const obj = {};
         header.forEach((h,i)=> obj[h] = (cols[i] ?? '').trim());
         return obj;
       });
 
-      // Detect columns
-      function findCol(headers, keyword){
-        return headers.find(h => h.toLowerCase().includes(keyword.toLowerCase()));
-      }
-      const COL_STATE  = findCol(header, 'state');
-      const COL_AMOUNT = findCol(header, 'amount');
-      const COL_YEAR   = findCol(header, 'year');
-      const COL_SECTOR = findCol(header, 'sector');
+      const COL_STATE = 'State';
+      const COL_AMOUNT = 'Exp(INR Crore)';
+      const COL_SECTOR = 'Sector';
 
-      const year = "2024-25";
-      const allData = rawRows.map(r => ({
+      const allData = rows.map(r => ({
         State: r[COL_STATE],
         Sector: r[COL_SECTOR],
-        Amount: parseAmount(r[COL_AMOUNT]),
-        Year: r[COL_YEAR]
+        Amount: parseFloat(r[COL_AMOUNT]) || 0
       }));
-      const filtered = allData.filter(d => d.Year === year);
 
       // Totals
-      const totalAmount = filtered.reduce((sum, d) => sum + d.Amount, 0);
-      const numProjects = filtered.length;
-      const numStates = new Set(filtered.map(d => d.State)).size;
+      const totalAmount = allData.reduce((sum, d) => sum + d.Amount, 0);
+      document.getElementById('totalAmount').textContent = `₹ ${totalAmount.toFixed(2)}`;
 
-      document.getElementById('totalAmount').textContent = "₹ " + totalAmount.toFixed(2);
-      document.getElementById('numProjects').textContent = numProjects;
-      document.getElementById('numStates').textContent = numStates;
+      document.getElementById('numProjects').textContent = allData.length;
+      document.getElementById('numStates').textContent = new Set(allData.map(d => d.State)).size;
 
-      // State totals
-      const stateTotals = {};
-      filtered.forEach(d => {
-        stateTotals[d.State] = (stateTotals[d.State] || 0) + d.Amount;
-      });
-
-      const ctxState = document.getElementById('stateChart').getContext('2d');
-      new Chart(ctxState, {
-        type: 'bar',
-        data: {
-          labels: Object.keys(stateTotals),
-          datasets: [{ label: 'Amount (₹ Cr)', data: Object.values(stateTotals), backgroundColor: '#38bdf8' }]
-        },
-        options: { plugins: { legend: { display: false } } }
-      });
-
-      // Fill table
-      const tbody = document.querySelector('#stateTable tbody');
-      Object.entries(stateTotals).forEach(([state, amt]) => {
-        const row = document.createElement('tr');
-        row.innerHTML = `<td>${state}</td><td>₹ ${amt.toFixed(2)}</td>`;
-        tbody.appendChild(row);
-      });
-
-      // Sector totals
+      // Group by Sector
       const sectorTotals = {};
-      filtered.forEach(d => {
-        sectorTotals[d.Sector] = (sectorTotals[d.Sector] || 0) + d.Amount;
-      });
+      allData.forEach(d => { sectorTotals[d.Sector] = (sectorTotals[d.Sector]||0)+d.Amount; });
 
-      const ctxSector = document.getElementById('sectorChart').getContext('2d');
-      new Chart(ctxSector, {
+      // Group by State
+      const stateTotals = {};
+      allData.forEach(d => { stateTotals[d.State] = (stateTotals[d.State]||0)+d.Amount; });
+
+      // Sector chart
+      new Chart(document.getElementById('sectorChart'), {
         type: 'doughnut',
         data: {
           labels: Object.keys(sectorTotals),
-          datasets: [{ data: Object.values(sectorTotals), backgroundColor: ['#38bdf8','#60a5fa','#a78bfa','#f472b6','#facc15','#4ade80','#f87171'] }]
+          datasets: [{ data: Object.values(sectorTotals), backgroundColor: ['#38bdf8','#34d399','#f87171','#fbbf24','#a78bfa','#f472b6'] }]
+        },
+        options: { plugins: { title: { display: true, text: 'Amount Spent by Sector', color:'#f8fafc' } } }
+      });
+
+      // State chart
+      new Chart(document.getElementById('stateChart'), {
+        type: 'bar',
+        data: {
+          labels: Object.keys(stateTotals),
+          datasets: [{ label: 'CSR Spend (₹ Cr)', data: Object.values(stateTotals), backgroundColor: '#60a5fa' }]
+        },
+        options: { plugins: { title: { display: true, text: 'Amount Spent by State', color:'#f8fafc' } },
+          scales: { x: { ticks: { color:'#f8fafc' }}, y: { ticks: { color:'#f8fafc' }} }
         }
+      });
+
+      // Table
+      const tbody = document.querySelector('#stateTable tbody');
+      Object.entries(stateTotals).forEach(([state, amt])=>{
+        const tr = document.createElement('tr');
+        tr.innerHTML = `<td>${state}</td><td>₹ ${amt.toFixed(2)}</td>`;
+        tbody.appendChild(tr);
       });
     }
 
-    init().catch(err => {
-      console.error(err);
-      alert('Error loading csr_data.csv');
-    });
+    init().catch(err => { console.error(err); alert('Error loading data'); });
   </script>
 </body>
 </html>
