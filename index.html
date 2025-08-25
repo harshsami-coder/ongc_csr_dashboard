@@ -3,10 +3,13 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
-  <title>ONGC CSR Spending for 2024-25</title>
+  <title>ONGC CSR Spending Dashboard (2024-25)</title>
 
   <!-- Chart.js -->
   <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.min.js"></script>
+  <!-- Leaflet.js for Map -->
+  <link rel="stylesheet" href="https://unpkg.com/leaflet/dist/leaflet.css" />
+  <script src="https://unpkg.com/leaflet/dist/leaflet.js"></script>
 
   <style>
     body {
@@ -22,9 +25,9 @@
       border-bottom: 2px solid #334155;
     }
     header h1 { margin: 0; color: #facc15; }
-    .container { max-width: 1200px; margin: auto; padding: 20px; }
+    .container { max-width: 1400px; margin: auto; padding: 20px; }
     .grid { display: grid; gap: 20px; }
-    @media(min-width: 900px) {
+    @media(min-width: 1000px) {
       .grid { grid-template-columns: repeat(3, 1fr); }
     }
     .card {
@@ -34,11 +37,7 @@
       text-align: center;
       box-shadow: 0 6px 12px rgba(0,0,0,0.3);
     }
-    .big-number {
-      font-size: 2rem;
-      font-weight: bold;
-      color: #facc15;
-    }
+    .big-number { font-size: 2rem; font-weight: bold; color: #facc15; }
     table {
       width: 100%;
       border-collapse: collapse;
@@ -51,28 +50,31 @@
       text-align: left;
     }
     th { background: #0f172a; }
+    #map { height: 400px; border-radius: 10px; }
+    select {
+      padding: 8px;
+      border-radius: 6px;
+      border: none;
+      background: #334155;
+      color: #f8fafc;
+      margin-bottom: 15px;
+    }
   </style>
 </head>
 <body>
   <header>
-    <h1>ONGC CSR Spending for 2024-25</h1>
+    <h1>ONGC CSR Spending Dashboard (2024-25)</h1>
   </header>
 
   <div class="container">
     <div class="grid">
-      <div class="card">
-        <h3>Total Amount Spent in Crore</h3>
-        <div class="big-number" id="totalAmount">₹ 0.00</div>
-      </div>
-      <div class="card">
-        <h3>Number of CSR Projects</h3>
-        <div class="big-number" id="numProjects">0</div>
-      </div>
-      <div class="card">
-        <h3>Number of States</h3>
-        <div class="big-number" id="numStates">0</div>
-      </div>
+      <div class="card"><canvas id="gaugeChart"></canvas><h3>Total Amount Spent (₹ Cr)</h3></div>
+      <div class="card"><h3>Number of CSR Projects</h3><div class="big-number" id="numProjects">0</div></div>
+      <div class="card"><h3>Number of States</h3><div class="big-number" id="numStates">0</div></div>
     </div>
+
+    <h3>Filter by State:</h3>
+    <select id="stateFilter"><option value="All">All States</option></select>
 
     <div class="grid">
       <div class="card"><canvas id="sectorChart"></canvas></div>
@@ -85,9 +87,17 @@
         </table>
       </div>
     </div>
+
+    <div class="card">
+      <h3>Spending Map</h3>
+      <div id="map"></div>
+    </div>
   </div>
 
   <script>
+    let sectorChart, stateChart, gaugeChart;
+    let map, markers = [];
+
     async function init() {
       const resp = await fetch('csr_data.csv');
       const text = await resp.text();
@@ -104,57 +114,110 @@
       const COL_STATE = 'State';
       const COL_AMOUNT = 'Exp(INR Crore)';
       const COL_SECTOR = 'Sector';
+      const COL_PROJECT = 'Project Name';
 
       const allData = rows.map(r => ({
         State: r[COL_STATE],
         Sector: r[COL_SECTOR],
+        Project: r[COL_PROJECT],
         Amount: parseFloat(r[COL_AMOUNT]) || 0
       }));
 
-      // Totals
-      const totalAmount = allData.reduce((sum, d) => sum + d.Amount, 0);
-      document.getElementById('totalAmount').textContent = `₹ ${totalAmount.toFixed(2)}`;
+      function updateDashboard(filteredData) {
+        // Totals
+        const totalAmount = filteredData.reduce((sum, d) => sum + d.Amount, 0);
+        document.getElementById('numProjects').textContent = filteredData.length;
+        document.getElementById('numStates').textContent = new Set(filteredData.map(d => d.State)).size;
 
-      document.getElementById('numProjects').textContent = allData.length;
-      document.getElementById('numStates').textContent = new Set(allData.map(d => d.State)).size;
+        // Gauge chart
+        if (gaugeChart) gaugeChart.destroy();
+        gaugeChart = new Chart(document.getElementById('gaugeChart'), {
+          type: 'doughnut',
+          data: { labels: ['Spent','Remaining'],
+            datasets: [{ data: [totalAmount, Math.max(0,200-totalAmount)],
+              backgroundColor: ['#38bdf8','#334155'], cutout:'70%', circumference: 180, rotation: 270 }] },
+          options: { plugins:{ legend:{display:false}, tooltip:{enabled:false}, title:{display:true,text:`₹ ${totalAmount.toFixed(2)}`,color:'#facc15'} } }
+        });
 
-      // Group by Sector
-      const sectorTotals = {};
-      allData.forEach(d => { sectorTotals[d.Sector] = (sectorTotals[d.Sector]||0)+d.Amount; });
+        // Group by Sector
+        const sectorTotals = {};
+        filteredData.forEach(d => { sectorTotals[d.Sector] = (sectorTotals[d.Sector]||0)+d.Amount; });
 
-      // Group by State
-      const stateTotals = {};
-      allData.forEach(d => { stateTotals[d.State] = (stateTotals[d.State]||0)+d.Amount; });
+        if (sectorChart) sectorChart.destroy();
+        sectorChart = new Chart(document.getElementById('sectorChart'), {
+          type: 'doughnut',
+          data: {
+            labels: Object.keys(sectorTotals),
+            datasets: [{ data: Object.values(sectorTotals),
+              backgroundColor: ['#38bdf8','#34d399','#f87171','#fbbf24','#a78bfa','#f472b6'] }]
+          },
+          options: { plugins: { title: { display: true, text: 'Amount Spent by Sector', color:'#f8fafc' } } }
+        });
 
-      // Sector chart
-      new Chart(document.getElementById('sectorChart'), {
-        type: 'doughnut',
-        data: {
-          labels: Object.keys(sectorTotals),
-          datasets: [{ data: Object.values(sectorTotals), backgroundColor: ['#38bdf8','#34d399','#f87171','#fbbf24','#a78bfa','#f472b6'] }]
-        },
-        options: { plugins: { title: { display: true, text: 'Amount Spent by Sector', color:'#f8fafc' } } }
+        // Group by State
+        const stateTotals = {};
+        filteredData.forEach(d => { stateTotals[d.State] = (stateTotals[d.State]||0)+d.Amount; });
+
+        if (stateChart) stateChart.destroy();
+        stateChart = new Chart(document.getElementById('stateChart'), {
+          type: 'bar',
+          data: {
+            labels: Object.keys(stateTotals),
+            datasets: [{ label: 'CSR Spend (₹ Cr)', data: Object.values(stateTotals), backgroundColor: '#60a5fa' }]
+          },
+          options: { plugins: { title: { display: true, text: 'Amount Spent by State', color:'#f8fafc' } },
+            scales: { x: { ticks: { color:'#f8fafc' }}, y: { ticks: { color:'#f8fafc' }} }
+          }
+        });
+
+        // Table
+        const tbody = document.querySelector('#stateTable tbody');
+        tbody.innerHTML = '';
+        Object.entries(stateTotals).forEach(([state, amt])=>{
+          const tr = document.createElement('tr');
+          tr.innerHTML = `<td>${state}</td><td>₹ ${amt.toFixed(2)}</td>`;
+          tbody.appendChild(tr);
+        });
+
+        // Map Update
+        markers.forEach(m => m.remove());
+        markers = [];
+        Object.entries(stateTotals).forEach(([state, amt])=>{
+          // Simple centroid lookup (dummy lat/lng for demo, real app needs proper state coords)
+          const coords = {
+            "Delhi":[28.61,77.23],"Maharashtra":[19.07,72.87],"Gujarat":[22.3,70.8],
+            "Uttar Pradesh":[26.8,80.9],"Tamil Nadu":[13.08,80.27],"Karnataka":[12.97,77.59]
+          };
+          if(coords[state]) {
+            const marker = L.circleMarker(coords[state],{radius:8,color:'#facc15'})
+              .bindPopup(`<b>${state}</b><br>₹ ${amt.toFixed(2)} Cr`);
+            marker.addTo(map);
+            markers.push(marker);
+          }
+        });
+      }
+
+      // Populate dropdown
+      const stateFilter = document.getElementById('stateFilter');
+      [...new Set(allData.map(d => d.State))].forEach(st=>{
+        const opt=document.createElement('option');
+        opt.value=st; opt.textContent=st;
+        stateFilter.appendChild(opt);
       });
 
-      // State chart
-      new Chart(document.getElementById('stateChart'), {
-        type: 'bar',
-        data: {
-          labels: Object.keys(stateTotals),
-          datasets: [{ label: 'CSR Spend (₹ Cr)', data: Object.values(stateTotals), backgroundColor: '#60a5fa' }]
-        },
-        options: { plugins: { title: { display: true, text: 'Amount Spent by State', color:'#f8fafc' } },
-          scales: { x: { ticks: { color:'#f8fafc' }}, y: { ticks: { color:'#f8fafc' }} }
-        }
+      stateFilter.addEventListener('change',()=>{
+        const val = stateFilter.value;
+        updateDashboard(val==="All"? allData : allData.filter(d=>d.State===val));
       });
 
-      // Table
-      const tbody = document.querySelector('#stateTable tbody');
-      Object.entries(stateTotals).forEach(([state, amt])=>{
-        const tr = document.createElement('tr');
-        tr.innerHTML = `<td>${state}</td><td>₹ ${amt.toFixed(2)}</td>`;
-        tbody.appendChild(tr);
-      });
+      // Initialize Map
+      map = L.map('map').setView([22.97, 78.65], 5); // India center
+      L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+        attribution: '&copy; OpenStreetMap contributors'
+      }).addTo(map);
+
+      // Initial full update
+      updateDashboard(allData);
     }
 
     init().catch(err => { console.error(err); alert('Error loading data'); });
