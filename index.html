@@ -90,8 +90,9 @@
         return obj;
       });
 
+      // ✅ Match your CSV headers
       const COL_STATE = 'State';
-      const COL_AMOUNT = 'Amount Spent (INR Cr.)';
+      const COL_AMOUNT = 'Amount';
       const COL_YEAR = 'Year';
 
       const allData = rows.map(r => ({
@@ -100,11 +101,11 @@
         Year: r[COL_YEAR]
       }));
 
-      // ✅ Only allow real years like 2019-20, 2024-25
+      // ✅ Only allow valid years
       const yearPattern = /^\d{4}-\d{2}$/;
       const years = [...new Set(allData.map(d=>d.Year))]
         .filter(y => yearPattern.test(y))
-        .sort();
+        .sort((a,b) => a.localeCompare(b, undefined, {numeric:true}));
 
       // Populate dropdown
       const yearSelect = document.getElementById('yearSelect');
@@ -163,7 +164,7 @@
           }
         });
 
-        yearChart.data.labels = Object.keys(yearTotals).sort();
+        yearChart.data.labels = Object.keys(yearTotals).sort((a,b) => a.localeCompare(b, undefined, {numeric:true}));
         yearChart.data.datasets[0].data = Object.values(yearTotals);
         yearChart.update();
       }
