@@ -5,264 +5,188 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
   <title>ONGC CSR Dashboard</title>
 
+  <!-- Chart.js -->
   <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.min.js"></script>
 
   <style>
-    body{margin:0;font-family:Arial,Helvetica,sans-serif;background:#0f172a;color:#f8fafc}
-    header{padding:20px;text-align:center;background:#1e293b;border-bottom:2px solid #334155}
-    header h1{margin:0;color:#facc15}
-    .container{max-width:1200px;margin:auto;padding:20px}
-    .grid{display:grid;gap:20px}
-    @media(min-width:900px){.grid{grid-template-columns:1fr 1fr}}
-    .card{background:#1e293b;border-radius:10px;padding:20px;box-shadow:0 6px 12px rgba(0,0,0,.3)}
-    select{padding:8px;margin:10px 0 20px 0;border-radius:6px;border:none;font-size:14px}
-    .kpis{display:grid;grid-template-columns:repeat(3,1fr);gap:12px;margin:8px 0 18px}
-    .kpi{background:#1e293b;border-radius:10px;padding:14px;text-align:center}
-    .kpi .lbl{font-size:12px;opacity:.8;text-transform:uppercase;letter-spacing:.05em}
-    .kpi .val{margin-top:6px;font-size:22px;font-weight:700}
-    table{width:100%;border-collapse:collapse;font-size:14px}
-    th,td{padding:8px 10px;border-bottom:1px solid #334155}
-    th{background:#0b1222;text-align:left}
-    .muted{color:#94a3b8;font-size:12px}
-    .warn{color:#f59e0b}
+    body {
+      margin: 0;
+      font-family: Arial, sans-serif;
+      background: #0f172a;
+      color: #f8fafc;
+    }
+    header {
+      padding: 20px;
+      text-align: center;
+      background: #1e293b;
+      border-bottom: 2px solid #334155;
+    }
+    header h1 { margin: 0; color: #facc15; }
+    .container { max-width: 1200px; margin: auto; padding: 20px; }
+    .grid { display: grid; gap: 20px; }
+    @media(min-width: 900px) {
+      .grid { grid-template-columns: 1fr 1fr; }
+    }
+    .card {
+      background: #1e293b;
+      border-radius: 10px;
+      padding: 20px;
+      box-shadow: 0 6px 12px rgba(0,0,0,0.3);
+    }
+    select {
+      padding: 8px;
+      margin: 10px 0 20px 0;
+      border-radius: 6px;
+      border: none;
+      font-size: 14px;
+    }
   </style>
 </head>
 <body>
-<header>
-  <h1>ONGC CSR Spending Dashboard</h1>
-</header>
+  <header>
+    <h1>ONGC CSR Spending Dashboard</h1>
+  </header>
 
-<div class="container">
-  <!-- Year Filter -->
-  <label for="yearSelect">Select Year: </label>
-  <select id="yearSelect"></select>
+  <div class="container">
+    <!-- Year Filter -->
+    <label for="yearSelect">Select Year: </label>
+    <select id="yearSelect"></select>
 
-  <!-- KPIs -->
-  <div class="kpis">
-    <div class="kpi">
-      <div class="lbl">Rows Loaded</div>
-      <div class="val" id="kpi-rows">—</div>
-    </div>
-    <div class="kpi">
-      <div class="lbl">Unique States</div>
-      <div class="val" id="kpi-states">—</div>
-    </div>
-    <div class="kpi">
-      <div class="lbl">Unique Years</div>
-      <div class="val" id="kpi-years">—</div>
-    </div>
-  </div>
-
-  <div class="grid">
-    <div class="card">
-      <canvas id="stateChart"></canvas>
-    </div>
-    <div class="card">
-      <canvas id="yearChart"></canvas>
-    </div>
-  </div>
-
-  <div class="grid" style="margin-top:20px;">
-    <div class="card">
-      <h3 style="margin-top:0">Year totals (as parsed)</h3>
-      <table>
-        <thead><tr><th>Year</th><th>Total CSR Spend (₹ Cr)</th></tr></thead>
-        <tbody id="yearTableBody"></tbody>
-      </table>
-    </div>
-    <div class="card">
-      <h3 style="margin-top:0">Data QA</h3>
-      <div class="muted">
-        <div>Invalid or non-standard year values found: <span id="qa-bad-years">0</span></div>
-        <div>Rows with non-numeric amounts ignored: <span id="qa-bad-amt">0</span></div>
-        <div class="warn" id="qa-notes"></div>
+    <div class="grid">
+      <div class="card">
+        <canvas id="stateChart"></canvas>
+      </div>
+      <div class="card">
+        <canvas id="yearChart"></canvas>
       </div>
     </div>
   </div>
-</div>
 
-<script>
-  // ---- Normalizers ---------------------------------------------------------
-  const yearPattern = /^\d{4}-\d{2}$/; // e.g., 2019-20
-
-  function normalizeYear(y){
-    if(!y) return '';
-    let s = String(y).trim();
-    // replace en/em dashes and weird spaces
-    s = s.replace(/[\u2012\u2013\u2014\u2212]/g, '-').replace(/\s+/g,' ');
-    // common formats -> 2019-20
-    const m1 = s.match(/^(\d{4})\s*-\s*(\d{2})$/);
-    const m2 = s.match(/^(\d{4})\s*-\s*(\d{4})$/); // 2019-2020
-    const m3 = s.match(/^(\d{4})\s*[–-]\s*(\d{2})$/); // with en dash
-    const m4 = s.match(/^(\d{4})\s*[–-]\s*(\d{4})$/);
-    if(m1) return `${m1[1]}-${m1[2]}`;
-    if(m2) return `${m2[1]}-${m2[2].slice(2)}`;
-    if(m3) return `${m3[1]}-${m3[2]}`;
-    if(m4) return `${m4[1]}-${m4[2].slice(2)}`;
-    return s;
-  }
-
-  function normalizeState(s){
-    return (s || '').toString().trim();
-  }
-
-  function parseAmount(str){
-    if(str === null || str === undefined) return NaN;
-    let s = String(str).trim();
-    // remove currency words/symbols
-    s = s.replace(/₹|rs\.?|inr|crore|crs?|cr\.?|amount|/-/gi, '');
-    // remove commas and spaces
-    s = s.replace(/,/g,'').replace(/\s+/g,'');
-    // if it’s like "0.05Cr" it’s already fine; if empty -> NaN
-    if(s === '' || s === '.') return NaN;
-    const n = Number(s);
-    return Number.isFinite(n) ? n : NaN;
-  }
-
-  // ---- CSV reader that respects quotes ------------------------------------
-  function parseCSV(text){
-    const lines = text.split(/\r?\n/).filter(l => l.trim().length);
-    const header = splitCSVLine(lines[0]).map(h => h.trim());
-    return lines.slice(1).map(line => {
-      const cols = splitCSVLine(line);
-      const obj = {};
-      header.forEach((h,i)=> obj[h] = (cols[i] ?? '').trim());
-      return obj;
-    });
-  }
-  function splitCSVLine(line){
-    const cols = []; let cur = ''; let inQ = false;
-    for(let i=0;i<line.length;i++){
-      const ch = line[i];
-      if(ch === '"'){
-        if(inQ && line[i+1] === '"'){ cur += '"'; i++; } // escaped quote
-        else inQ = !inQ;
-      } else if(ch === ',' && !inQ){
-        cols.push(cur); cur = '';
-      } else cur += ch;
+  <script>
+    function parseAmount(str) {
+      if (!str) return 0;
+      const cleaned = String(str).replace(/[^\d.]/g, '');
+      const n = parseFloat(cleaned);
+      return isNaN(n) ? 0 : n;
     }
-    cols.push(cur);
-    return cols;
-  }
 
-  // ---- Main ---------------------------------------------------------------
-  async function init(){
-    const resp = await fetch('csr_data.csv');
-    const text = await resp.text();
-    const rawRows = parseCSV(text);
+    async function init() {
+      const resp = await fetch('csr_data.csv');
+      const text = await resp.text();
 
-    // Map your columns
-    const COL_STATE  = 'State';
-    const COL_AMOUNT = 'Amount(in crore)';
-    const COL_YEAR   = 'Year';
+      const lines = text.split(/\r?\n/).filter(l => l.trim().length);
+      const header = lines[0].split(',').map(h => h.trim());
+      const rawRows = lines.slice(1).map(line => {
+        const cols = [];
+        let cur = '', inQ = false;
+        for (let ch of line) {
+          if (ch === '"') { inQ = !inQ; continue; }
+          if (ch === ',' && !inQ) { cols.push(cur); cur = ''; }
+          else cur += ch;
+        }
+        cols.push(cur);
+        const obj = {};
+        header.forEach((h,i)=> obj[h] = (cols[i] ?? '').trim());
+        return obj;
+      });
 
-    // Normalize & validate
-    const badYears = new Map();  // value -> count
-    let badAmt = 0;
-
-    const rows = rawRows.map(r => {
-      const Year = normalizeYear(r[COL_YEAR]);
-      const State = normalizeState(r[COL_STATE]);
-      const AmountRaw = r[COL_AMOUNT];
-      const Amount = parseAmount(AmountRaw);
-      if(!yearPattern.test(Year)){
-        const k = Year || '(blank)';
-        badYears.set(k, (badYears.get(k)||0)+1);
+      // 🔎 Auto-detect columns (case-insensitive match)
+      function findCol(headers, keyword){
+        return headers.find(h => h.toLowerCase().includes(keyword.toLowerCase()));
       }
-      if(!Number.isFinite(Amount)) badAmt++;
-      return {Year, State, Amount};
-    });
+      const headers = Object.keys(rawRows[0] || {});
+      const COL_STATE  = findCol(headers, 'state');
+      const COL_AMOUNT = findCol(headers, 'amount');
+      const COL_YEAR   = findCol(headers, 'year');
 
-    // Filter to good rows for calculations
-    const clean = rows.filter(r => yearPattern.test(r.Year) && Number.isFinite(r.Amount));
-
-    // KPIs
-    document.getElementById('kpi-rows').textContent = clean.length.toLocaleString();
-    document.getElementById('kpi-states').textContent =
-      new Set(clean.map(d=>d.State).filter(Boolean)).size;
-    const yearsSet = [...new Set(clean.map(d=>d.Year))].sort((a,b)=>a.localeCompare(b,undefined,{numeric:true}));
-    document.getElementById('kpi-years').textContent = yearsSet.length;
-
-    // QA panel
-    const badYearCount = [...badYears.values()].reduce((a,b)=>a+b,0);
-    document.getElementById('qa-bad-years').textContent = badYearCount;
-    document.getElementById('qa-bad-amt').textContent = badAmt;
-    if(badYears.size){
-      const list = [...badYears.entries()].map(([y,c]) => `${y} (${c})`).join(', ');
-      document.getElementById('qa-notes').textContent =
-        `Non-standard year strings encountered -> ${list}`;
-    }
-
-    // Populate dropdown
-    const yearSelect = document.getElementById('yearSelect');
-    yearsSet.forEach(y=>{
-      const opt=document.createElement('option'); opt.value=y; opt.textContent=y; yearSelect.appendChild(opt);
-    });
-
-    // Charts
-    const stateCtx = document.getElementById('stateChart').getContext('2d');
-    const yearCtx  = document.getElementById('yearChart').getContext('2d');
-
-    const stateChart = new Chart(stateCtx, {
-      type:'bar',
-      data:{labels:[], datasets:[{label:'CSR Spend (₹ Cr)', data:[], backgroundColor:'#38bdf8'}]},
-      options:{
-        plugins:{title:{display:true,text:'CSR Spending by State',color:'#f8fafc'}},
-        scales:{x:{ticks:{color:'#f8fafc'}}, y:{ticks:{color:'#f8fafc'}}}
+      if (!COL_STATE || !COL_AMOUNT || !COL_YEAR) {
+        alert("CSV headers not found. Please check your file.");
+        console.error("Detected headers:", headers);
+        return;
       }
-    });
 
-    const yearChart = new Chart(yearCtx, {
-      type:'bar',
-      data:{labels:[], datasets:[{label:'Total CSR Spend (₹ Cr)', data:[], backgroundColor:'#60a5fa'}]},
-      options:{
-        plugins:{title:{display:true,text:'Year-wise CSR Spending',color:'#f8fafc'}},
-        scales:{x:{ticks:{color:'#f8fafc'}}, y:{ticks:{color:'#f8fafc'}}}
+      const allData = rawRows.map(r => ({
+        State: r[COL_STATE],
+        Amount: parseAmount(r[COL_AMOUNT]),
+        Year: r[COL_YEAR]
+      }));
+
+      // ✅ Only allow years like 2019-20, 2024-25
+      const yearPattern = /^\d{4}-\d{2}$/;
+      const years = [...new Set(allData.map(d=>d.Year))]
+        .filter(y => yearPattern.test(y))
+        .sort();
+
+      // Populate dropdown
+      const yearSelect = document.getElementById('yearSelect');
+      years.forEach(y => {
+        const opt = document.createElement('option');
+        opt.value = y;
+        opt.textContent = y;
+        yearSelect.appendChild(opt);
+      });
+
+      // Charts
+      const stateCtx = document.getElementById('stateChart').getContext('2d');
+      const yearCtx = document.getElementById('yearChart').getContext('2d');
+
+      const stateChart = new Chart(stateCtx, {
+        type: 'bar',
+        data: { labels: [], datasets: [{ label: 'CSR Spend (₹ Cr)', data: [], backgroundColor: '#38bdf8' }] },
+        options: {
+          plugins: { title: { display: true, text: 'CSR Spending by State', color:'#f8fafc' } },
+          scales: {
+            x: { ticks: { color: '#f8fafc' } },
+            y: { ticks: { color: '#f8fafc' } }
+          }
+        }
+      });
+
+      const yearChart = new Chart(yearCtx, {
+        type: 'bar',
+        data: { labels: [], datasets: [{ label: 'Total CSR Spend (₹ Cr)', data: [], backgroundColor: '#60a5fa' }] },
+        options: {
+          plugins: { title: { display: true, text: 'Year-wise CSR Spending', color:'#f8fafc' } },
+          scales: {
+            x: { ticks: { color: '#f8fafc' } },
+            y: { ticks: { color: '#f8fafc' } }
+          }
+        }
+      });
+
+      function updateCharts(year) {
+        // State chart for selected year
+        const filtered = allData.filter(d => d.Year === year);
+        const stateTotals = {};
+        filtered.forEach(d => {
+          stateTotals[d.State] = (stateTotals[d.State] || 0) + d.Amount;
+        });
+
+        stateChart.data.labels = Object.keys(stateTotals);
+        stateChart.data.datasets[0].data = Object.values(stateTotals);
+        stateChart.update();
+
+        // Year-wise chart
+        const yearTotals = {};
+        allData.forEach(d => {
+          if (yearPattern.test(d.Year)) {
+            yearTotals[d.Year] = (yearTotals[d.Year] || 0) + d.Amount;
+          }
+        });
+
+        yearChart.data.labels = Object.keys(yearTotals).sort();
+        yearChart.data.datasets[0].data = Object.values(yearTotals);
+        yearChart.update();
       }
+
+      yearSelect.addEventListener('change', e => updateCharts(e.target.value));
+      updateCharts(years[0]); // initialize
+    }
+
+    init().catch(err => {
+      console.error(err);
+      alert('Error loading data. Ensure csr_data.csv is in the same folder.');
     });
-
-    // Precompute year totals (for table + chart)
-    function computeYearTotals(dataset){
-      const totals = {};
-      dataset.forEach(d=> totals[d.Year] = (totals[d.Year]||0) + d.Amount);
-      const labels = Object.keys(totals).sort((a,b)=>a.localeCompare(b,undefined,{numeric:true}));
-      const values = labels.map(y=> +totals[y].toFixed(2));
-      return {labels, values};
-    }
-    function renderYearTable(labels, values){
-      const tbody = document.getElementById('yearTableBody');
-      tbody.innerHTML = labels.map((y,i)=>
-        `<tr><td>${y}</td><td>₹ ${values[i].toLocaleString(undefined,{minimumFractionDigits:2,maximumFractionDigits:2})} Cr</td></tr>`
-      ).join('');
-    }
-
-    function updateCharts(selectedYear){
-      // State totals for selected year
-      const filtered = clean.filter(d=>d.Year === selectedYear);
-      const stateTotals = {};
-      filtered.forEach(d => stateTotals[d.State] = (stateTotals[d.State]||0) + d.Amount);
-
-      stateChart.data.labels = Object.keys(stateTotals);
-      stateChart.data.datasets[0].data = Object.values(stateTotals).map(v=>+v.toFixed(2));
-      stateChart.update();
-
-      // Year totals across all years
-      const {labels, values} = computeYearTotals(clean);
-      yearChart.data.labels = labels;
-      yearChart.data.datasets[0].data = values;
-      yearChart.update();
-
-      renderYearTable(labels, values);
-    }
-
-    yearSelect.addEventListener('change', e => updateCharts(e.target.value));
-    updateCharts(yearsSet[0]);
-  }
-
-  init().catch(err=>{
-    console.error(err);
-    alert('Error loading data. Make sure csr_data.csv is in the same folder as index.html.');
-  });
-</script>
+  </script>
 </body>
 </html>
