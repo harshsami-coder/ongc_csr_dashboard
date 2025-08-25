@@ -10,6 +10,8 @@
   <!-- Leaflet.js for Map -->
   <link rel="stylesheet" href="https://unpkg.com/leaflet/dist/leaflet.css" />
   <script src="https://unpkg.com/leaflet/dist/leaflet.js"></script>
+  <!-- PapaParse for robust CSV parsing -->
+  <script src="https://cdn.jsdelivr.net/npm/papaparse@5.4.1/papaparse.min.js"></script>
 
   <style>
     body { margin: 0; font-family: Arial, sans-serif; background: #0f172a; color: #f8fafc; }
@@ -66,28 +68,17 @@
 
     async function init() {
       const resp = await fetch('csr_data.csv');
-      const text = await resp.text();
-      const lines = text.split(/\r?\n/).filter(l => l.trim().length);
+      const csvText = await resp.text();
 
-      // --- Parse CSV Robustly ---
-      const header = lines[0].split(',').map(h => h.replace(/"/g, '').trim());
-      const rows = lines.slice(1).map(line => {
-        const cols = line.split(',').map(c => c.replace(/"/g, '').trim());
-        const obj = {};
-        header.forEach((h,i)=> obj[h] = (cols[i] ?? '').trim());
-        return obj;
-      });
-
-      const COL_STATE = 'State';
-      const COL_AMOUNT = 'Exp(INR Crore)';
-      const COL_SECTOR = 'Sector';
-      const COL_PROJECT = 'Project Name';
+      // Parse CSV with PapaParse
+      const parsed = Papa.parse(csvText, { header: true, skipEmptyLines: true });
+      const rows = parsed.data;
 
       const allData = rows.map(r => ({
-        State: r[COL_STATE].trim(),
-        Sector: r[COL_SECTOR].trim(),
-        Project: r[COL_PROJECT].trim(),
-        Amount: parseFloat(r[COL_AMOUNT].replace(/,/g,'')) || 0
+        State: (r['State'] || '').trim(),
+        Sector: (r['Sector'] || '').trim(),
+        Project: (r['Project Name'] || '').trim(),
+        Amount: parseFloat((r['Exp(INR Crore)'] || '0').replace(/,/g, '')) || 0
       }));
 
       function updateDashboard(filteredData) {
@@ -100,7 +91,7 @@
         gaugeChart = new Chart(document.getElementById('gaugeChart'), {
           type: 'doughnut',
           data: { labels: ['Spent','Remaining'],
-            datasets: [{ data: [totalAmount, Math.max(0,200-totalAmount)],
+            datasets: [{ data: [totalAmount, Math.max(0,2000-totalAmount)], // raised cap to avoid negative
               backgroundColor: ['#38bdf8','#334155'], cutout:'70%', circumference: 180, rotation: 270 }] },
           options: { plugins:{ legend:{display:false}, tooltip:{enabled:false}, title:{display:true,text:`₹ ${totalAmount.toFixed(2)}`,color:'#facc15'} } }
         });
