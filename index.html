@@ -3,201 +3,332 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
-  <title>Oil and Natural Gas Corporation CSR Dashboard 2024-25</title>
+  <title>ONGC CSR Dashboard</title>
 
   <!-- Chart.js -->
   <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.min.js"></script>
 
-  <!-- Basic styles -->
   <style>
-    :root {
-      --bg: #0f0f10;
-      --panel: #1c1c21;
-      --text: #f5f7fb;
-      --muted: #98a2b3;
-      --accent: #ffcc00;
+    :root{
+      --bg:#0f172a;        /* slate-900 */
+      --panel:#1e293b;     /* slate-800 */
+      --text:#f8fafc;      /* slate-50 */
+      --muted:#94a3b8;     /* slate-400 */
+      --accent:#38bdf8;    /* sky-400 */
+      --border:#334155;    /* slate-700 */
     }
-    * { box-sizing: border-box; }
-    body {
-      margin: 0; background: var(--bg); color: var(--text);
-      font-family: system-ui, -apple-system, Segoe UI, Roboto, Arial, sans-serif;
-    }
-    header {
-      padding: 22px 20px; text-align: center; border-bottom: 1px solid #24242a;
-    }
-    header h1 { margin: 0; font-size: 24px; color: var(--accent); }
+    *{box-sizing:border-box}
+    body{margin:0;font-family:system-ui,-apple-system,Segoe UI,Roboto,Arial,sans-serif;background:var(--bg);color:var(--text)}
+    header{display:flex;align-items:center;justify-content:center;gap:12px;padding:18px;background:var(--panel);border-bottom:1px solid var(--border)}
+    header h1{margin:0;font-size:20px;color:var(--accent);font-weight:700}
+    .container{max-width:1200px;margin:0 auto;padding:18px}
 
-    .container { max-width: 1200px; margin: 0 auto; padding: 18px; }
+    .toolbar{display:flex;flex-wrap:wrap;align-items:center;gap:10px;margin-bottom:14px}
+    .year-select,.search{padding:8px 10px;background:var(--panel);color:var(--text);border:1px solid var(--border);border-radius:8px}
+    .pill{font-size:12px;color:var(--muted)}
 
-    .kpis {
-      display: grid; grid-template-columns: repeat(3, 1fr); gap: 16px; margin-bottom: 18px;
-    }
-    .card {
-      background: var(--panel); border-radius: 14px; padding: 18px;
-      box-shadow: 0 6px 18px rgba(0,0,0,0.35);
-    }
-    .kpi-label { color: var(--muted); font-size: 13px; text-transform: uppercase; letter-spacing: .06em; }
-    .kpi-value { margin-top: 8px; font-size: 28px; font-weight: 700; }
+    .kpis{display:grid;grid-template-columns:repeat(3,1fr);gap:14px;margin-bottom:18px}
+    .card{background:var(--panel);border:1px solid var(--border);border-radius:14px;padding:16px;text-align:center}
+    .kpi-label{color:var(--muted);font-size:12px;text-transform:uppercase;letter-spacing:.06em}
+    .kpi-value{margin-top:8px;font-size:28px;font-weight:800}
 
-    .grid {
-      display: grid; grid-template-columns: 1fr; gap: 16px;
-    }
-    @media (min-width: 900px) {
-      .grid { grid-template-columns: 1fr 1fr; }
-    }
+    .charts{display:grid;grid-template-columns:1fr;gap:18px;margin-bottom:18px}
+    @media(min-width:900px){.charts{grid-template-columns:1fr 1fr}}
+    canvas{background:var(--panel);border:1px solid var(--border);border-radius:14px;padding:10px}
 
-    canvas {
-      width: 100% !important;
-      height: 360px !important;
-      background: var(--panel);
-      border-radius: 14px;
-      padding: 12px;
-      box-shadow: 0 6px 18px rgba(0,0,0,0.35);
-    }
-
-    .note { color: var(--muted); font-size: 12px; margin-top: 10px; text-align: center; }
-    a { color: #7dd3fc; text-decoration: none; }
+    .table-wrap{background:var(--panel);border:1px solid var(--border);border-radius:14px;overflow:hidden}
+    table{width:100%;border-collapse:collapse}
+    thead th{background:#0b1220;color:var(--muted);font-weight:600;font-size:12px;letter-spacing:.05em;text-transform:uppercase;padding:10px;border-bottom:1px solid var(--border);cursor:pointer;user-select:none}
+    tbody td{padding:10px;border-bottom:1px solid var(--border)}
+    tbody tr:hover{background:#182132}
+    .right{text-align:right}
+    .note{color:var(--muted);font-size:12px;margin-top:10px;text-align:center}
+    .btn{padding:8px 12px;background:#0b5e8a;border:1px solid var(--border);color:#e6f6ff;border-radius:8px;cursor:pointer}
+    .btn:disabled{opacity:.6;cursor:not-allowed}
   </style>
 </head>
 <body>
   <header>
-    <h1>NTPC CSR Spending Dashboard (2023–24)</h1>
+    <img alt="ONGC" src="https://upload.wikimedia.org/wikipedia/en/4/45/Oil_and_Natural_Gas_Corporation_Logo.svg" height="28">
+    <h1>ONGC CSR Dashboard (2019–2025)</h1>
   </header>
 
   <div class="container">
+    <!-- Toolbar -->
+    <div class="toolbar">
+      <label for="yearSelect" class="pill">Year</label>
+      <select id="yearSelect" class="year-select"></select>
+
+      <label for="searchInput" class="pill">Search State / Sector / Programme</label>
+      <input id="searchInput" class="search" type="text" placeholder="Type to filter table…" />
+
+      <button id="downloadBtn" class="btn" title="Download filtered state table as CSV">Download Table CSV</button>
+      <span class="pill" id="rowCount">— rows</span>
+    </div>
+
     <!-- KPI CARDS -->
     <section class="kpis">
       <div class="card">
-        <div class="kpi-label">Total Amount Spent (₹ Cr)</div>
+        <div class="kpi-label">Total Spend (₹ Cr)</div>
         <div class="kpi-value" id="kpi-total">—</div>
       </div>
       <div class="card">
-        <div class="kpi-label">Number of CSR Projects</div>
+        <div class="kpi-label">No. of Projects</div>
         <div class="kpi-value" id="kpi-projects">—</div>
       </div>
       <div class="card">
-        <div class="kpi-label">Number of States</div>
+        <div class="kpi-label">States Covered</div>
         <div class="kpi-value" id="kpi-states">—</div>
       </div>
     </section>
 
-    <!-- CHARTS -->
-    <section class="grid">
-      <div>
-        <canvas id="sectorChart"></canvas>
-      </div>
-      <!-- (reserved for next charts like Mode / Map) -->
-      <div class="card" style="display:flex;align-items:center;justify-content:center;height:360px;">
-        More charts coming next: Mode of Implementation, State Map, and State table.
-      </div>
+    <!-- Charts -->
+    <section class="charts">
+      <canvas id="sectorChart"></canvas>
+      <canvas id="yearChart"></canvas>
+    </section>
+
+    <!-- State Table -->
+    <section class="table-wrap">
+      <table id="stateTable">
+        <thead>
+          <tr>
+            <th data-key="State">State ▲▼</th>
+            <th data-key="Projects" class="right">Projects ▲▼</th>
+            <th data-key="Amount" class="right">Amount (₹ Cr) ▲▼</th>
+          </tr>
+        </thead>
+        <tbody></tbody>
+      </table>
     </section>
 
     <p class="note">
-      This page reads <code>csr_data.csv</code> from the same folder. If you host on GitHub Pages,
-      just push both <code>index.html</code> and <code>csr_data.csv</code> to your repo.
+      This page reads <code>csr_data.csv</code> from the same folder. Update the CSV and push to GitHub — the dashboard updates automatically.
     </p>
   </div>
 
   <script>
-    // Helper: parse "₹ 0.02" -> 0.02 (number)
-    function parseAmount(str) {
-      if (str == null) return 0;
-      // remove currency symbol, commas, spaces; keep digits and dot
-      const cleaned = String(str).replace(/[^\d.]/g, '');
-      const n = parseFloat(cleaned);
-      return isNaN(n) ? 0 : n;
-    }
-
-    // Load CSV, compute KPIs + build charts
-    async function init() {
-      // Load CSV text (must be same-folder path)
-      const resp = await fetch('csr_data.csv');
-      const text = await resp.text();
-
-      // Parse simple CSV (no library) – split lines, assume first row is header
+    // --- Utilities ---
+    function parseCSV(text){
       const lines = text.split(/\r?\n/).filter(l => l.trim().length);
-      const header = lines[0].split(',').map(h => h.trim());
-      const rows = lines.slice(1).map(line => {
-        // robust split: split by comma but keep commas inside quotes
-        const cols = [];
-        let cur = '', inQ = false;
-        for (let i = 0; i < line.length; i++) {
-          const ch = line[i];
-          if (ch === '"') { inQ = !inQ; continue; }
-          if (ch === ',' && !inQ) { cols.push(cur); cur = ''; }
-          else cur += ch;
-        }
-        cols.push(cur);
+      const header = splitCSVLine(lines[0]);
+      return lines.slice(1).map(line => {
+        const cols = splitCSVLine(line);
         const obj = {};
-        header.forEach((h, i) => obj[h] = (cols[i] ?? '').trim());
+        header.forEach((h,i)=> obj[h.trim()] = (cols[i] ?? '').trim());
+        if(obj["Amount (₹ Cr.)"]!==undefined){
+          const n = parseFloat(String(obj["Amount (₹ Cr.)"]).replace(/,/g,''));
+          obj["Amount (₹ Cr.)"] = isNaN(n) ? 0 : n;
+        }
         return obj;
       });
+    }
+    // split a CSV line with quotes support
+    function splitCSVLine(line){
+      const out=[]; let cur='', inQ=false;
+      for(let i=0;i<line.length;i++){
+        const ch=line[i];
+        if(ch==='\"'){ inQ=!inQ; continue; }
+        if(ch===',' && !inQ){ out.push(cur); cur=''; } else { cur+=ch; }
+      }
+      out.push(cur); return out;
+    }
+    function fmtCr(n){ return Number(n||0).toLocaleString(undefined,{minimumFractionDigits:2, maximumFractionDigits:2}); }
 
-      // Column names from your CSV:
-      const COL_SECTOR = 'Development Sector(s)';
-      const COL_STATE  = 'State';
-      const COL_AMOUNT = 'Amount Spent  (INR Cr.)';
+    // --- State ---
+    let allData = [];
+    let sectorChart, yearChart;
+    let currentYear = "2024-25";
+    let currentSort = { key: "Amount", dir: "desc" };
+    let lastTableData = []; // for CSV download (filtered+sorted rows)
 
-      // ----- KPIs -----
-      const totalAmount = rows.reduce((sum, r) => sum + parseAmount(r[COL_AMOUNT]), 0);
-      const totalProjects = rows.length;
-      const statesSet = new Set(rows.map(r => r[COL_STATE]).filter(Boolean));
-      const totalStates = statesSet.size;
+    // --- Load & init ---
+    async function init(){
+      try{
+        const resp = await fetch('csr_data.csv', {cache:'no-store'});
+        const text = await resp.text();
+        allData = parseCSV(text);
 
-      document.getElementById('kpi-total').textContent   = totalAmount.toFixed(2);
-      document.getElementById('kpi-projects').textContent = totalProjects.toLocaleString();
-      document.getElementById('kpi-states').textContent   = totalStates.toString();
+        // Years
+        const years = [...new Set(allData.map(d=>d.Year))].sort();
+        const select = document.getElementById('yearSelect');
+        years.forEach(y=>{
+          const opt=document.createElement('option'); opt.value=y; opt.textContent=y;
+          if(y==="2024-25") opt.selected=true;
+          select.appendChild(opt);
+        });
+        currentYear = select.value || years[years.length-1];
 
-      // ----- Sector Aggregation -----
+        select.addEventListener('change', ()=>{ currentYear = select.value; updateDashboard(); });
+        document.getElementById('searchInput').addEventListener('input', updateStateTable);
+        document.getElementById('downloadBtn').addEventListener('click', downloadTableCSV);
+
+        // Sort header clicks
+        document.querySelectorAll('#stateTable thead th').forEach(th=>{
+          th.addEventListener('click', ()=>{
+            const key = th.dataset.key;
+            if(currentSort.key === key){
+              currentSort.dir = currentSort.dir === 'asc' ? 'desc' : 'asc';
+            } else {
+              currentSort.key = key; currentSort.dir = key==='State' ? 'asc' : 'desc';
+            }
+            updateStateTable(); // re-render
+          });
+        });
+
+        drawYearChart();   // once (based on allData)
+        updateDashboard(); // KPIs + sector + table for selected year
+      }catch(err){
+        console.error(err);
+        alert('Failed to load csr_data.csv. Make sure it is in the same folder as index.html.');
+      }
+    }
+
+    // --- Dashboard updates for selected year ---
+    function updateDashboard(){
+      const data = allData.filter(d=>d.Year===currentYear);
+
+      // KPIs
+      const total = data.reduce((s,d)=> s + (d["Amount (₹ Cr.)"]||0), 0);
+      document.getElementById('kpi-total').textContent = fmtCr(total);
+      document.getElementById('kpi-projects').textContent = data.length.toLocaleString();
+      document.getElementById('kpi-states').textContent = new Set(data.map(d=>d.State)).size;
+
+      // Sector Pie
       const sectorTotals = {};
-      rows.forEach(r => {
-        const sector = r[COL_SECTOR] || 'Unknown';
-        const amt = parseAmount(r[COL_AMOUNT]);
-        sectorTotals[sector] = (sectorTotals[sector] || 0) + amt;
+      data.forEach(d=>{
+        const k = d.Sector || 'Unknown';
+        sectorTotals[k] = (sectorTotals[k]||0) + (d["Amount (₹ Cr.)"]||0);
+      });
+      const labels = Object.keys(sectorTotals);
+      const values = labels.map(k=> Number(sectorTotals[k].toFixed(2)));
+
+      if(sectorChart) sectorChart.destroy();
+      sectorChart = new Chart(document.getElementById('sectorChart').getContext('2d'), {
+        type:'pie',
+        data:{ labels, datasets:[{ data: values }]},
+        options:{
+          plugins:{
+            title:{ display:true, text:`CSR Spend by Sector (${currentYear})`, color:'#f8fafc', font:{weight:'600'} },
+            legend:{ labels:{ color:'#f8fafc' }},
+            tooltip:{ callbacks:{ label:(ctx)=> `${ctx.label}: ₹ ${fmtCr(ctx.raw)} Cr` } }
+          }
+        }
       });
 
-      // Prepare data for Chart.js
-      const sectorLabels = Object.keys(sectorTotals);
-      const sectorValues = sectorLabels.map(k => +sectorTotals[k].toFixed(2));
+      // State table
+      updateStateTable();
+    }
 
-      // ----- Sector Pie Chart -----
-      const ctx = document.getElementById('sectorChart').getContext('2d');
-      new Chart(ctx, {
-        type: 'pie',
-        data: {
-          labels: sectorLabels,
-          datasets: [{
-            data: sectorValues,
-            // leave colors to Chart.js defaults for now (cleaner + accessible)
-          }]
+    // --- Year-wise bar chart (once; updates only if data changes) ---
+    function drawYearChart(){
+      const yearly = {};
+      allData.forEach(d=>{
+        yearly[d.Year] = (yearly[d.Year]||0) + (d["Amount (₹ Cr.)"]||0);
+      });
+      const ys = Object.keys(yearly).sort();
+      const vals = ys.map(y=> Number(yearly[y].toFixed(2)));
+
+      if(yearChart) yearChart.destroy();
+      yearChart = new Chart(document.getElementById('yearChart').getContext('2d'), {
+        type:'bar',
+        data:{
+          labels: ys,
+          datasets:[{ label:'Total CSR Spend (₹ Cr)', data: vals }]
         },
-        options: {
-          plugins: {
-            title: {
-              display: true,
-              text: 'Amount Spent by Development Sector (₹ Cr)',
-              color: '#f5f7fb',
-              font: { size: 16, weight: '600' }
-            },
-            legend: {
-              position: 'bottom',
-              labels: { color: '#f5f7fb' }
-            },
-            tooltip: {
-              callbacks: {
-                label: (ctx) => `${ctx.label}: ₹ ${ctx.raw.toLocaleString(undefined,{minimumFractionDigits:2, maximumFractionDigits:2})} Cr`
-              }
-            }
+        options:{
+          plugins:{
+            title:{ display:true, text:'Year-wise CSR Spending', color:'#f8fafc', font:{weight:'600'} },
+            legend:{ labels:{ color:'#f8fafc' } }
+          },
+          scales:{
+            x:{ ticks:{ color:'#f8fafc' }, grid:{ color:'rgba(148,163,184,0.15)'} },
+            y:{ ticks:{ color:'#f8fafc' }, grid:{ color:'rgba(148,163,184,0.15)'}, beginAtZero:true }
           }
         }
       });
     }
 
-    // Kick off
-    init().catch(err => {
-      console.error(err);
-      alert('Failed to load csr_data.csv. Make sure it is in the same folder as index.html.');
-    });
+    // --- State table (aggregate + filter + sort) ---
+    function updateStateTable(){
+      const term = (document.getElementById('searchInput').value || '').toLowerCase().trim();
+      const data = allData.filter(d=>d.Year===currentYear);
+
+      // aggregate by state
+      const byState = {};
+      data.forEach(d=>{
+        const st = d.State || 'Unknown';
+        if(!byState[st]) byState[st] = { State: st, Projects: 0, Amount: 0, _rows: [] };
+        byState[st].Projects += 1;
+        byState[st].Amount += (d["Amount (₹ Cr.)"]||0);
+        byState[st]._rows.push(d);
+      });
+      let rows = Object.values(byState);
+
+      // filter by term (in state/sector/programme)
+      if(term){
+        rows = rows.filter(r=>{
+          const hay = [
+            r.State,
+            ...r._rows.map(x => x.Sector || ''),
+            ...r._rows.map(x => x.Programme || '')
+          ].join(' ').toLowerCase();
+          return hay.includes(term);
+        });
+      }
+
+      // sort
+      const key = currentSort.key;
+      const dir = currentSort.dir === 'asc' ? 1 : -1;
+      rows.sort((a,b)=>{
+        if(key==='State'){
+          return a.State.localeCompare(b.State) * dir;
+        }else if(key==='Projects'){
+          return (a.Projects - b.Projects) * dir;
+        }else{ // Amount
+          return (a.Amount - b.Amount) * dir;
+        }
+      });
+
+      // render
+      const tb = document.querySelector('#stateTable tbody');
+      tb.innerHTML = '';
+      rows.forEach(r=>{
+        const tr = document.createElement('tr');
+        tr.innerHTML = `
+          <td>${r.State}</td>
+          <td class="right">${r.Projects.toLocaleString()}</td>
+          <td class="right">₹ ${fmtCr(r.Amount)}</td>
+        `;
+        tb.appendChild(tr);
+      });
+
+      document.getElementById('rowCount').textContent = `${rows.length} states`;
+      lastTableData = rows; // for download
+    }
+
+    // --- Download filtered table as CSV ---
+    function downloadTableCSV(){
+      if(!lastTableData.length) return;
+      const header = ['State','Projects','Amount (₹ Cr)'];
+      const lines = [header.join(',')];
+      lastTableData.forEach(r=>{
+        lines.push([
+          `"${r.State.replace(/"/g,'""')}"`,
+          r.Projects,
+          r.Amount.toFixed(2)
+        ].join(','));
+      });
+      const blob = new Blob([lines.join('\n')], {type:'text/csv;charset=utf-8;'});
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url; a.download = `ongc_csr_state_${currentYear}.csv`;
+      document.body.appendChild(a); a.click(); a.remove();
+      URL.revokeObjectURL(url);
+    }
+
+    // go!
+    init();
   </script>
 </body>
 </html>
