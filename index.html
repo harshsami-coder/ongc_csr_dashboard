@@ -12,53 +12,19 @@
   <script src="https://unpkg.com/leaflet/dist/leaflet.js"></script>
 
   <style>
-    body {
-      margin: 0;
-      font-family: Arial, sans-serif;
-      background: #0f172a;
-      color: #f8fafc;
-    }
-    header {
-      padding: 20px;
-      text-align: center;
-      background: #1e293b;
-      border-bottom: 2px solid #334155;
-    }
+    body { margin: 0; font-family: Arial, sans-serif; background: #0f172a; color: #f8fafc; }
+    header { padding: 20px; text-align: center; background: #1e293b; border-bottom: 2px solid #334155; }
     header h1 { margin: 0; color: #facc15; }
     .container { max-width: 1400px; margin: auto; padding: 20px; }
     .grid { display: grid; gap: 20px; }
-    @media(min-width: 1000px) {
-      .grid { grid-template-columns: repeat(3, 1fr); }
-    }
-    .card {
-      background: #1e293b;
-      border-radius: 10px;
-      padding: 20px;
-      text-align: center;
-      box-shadow: 0 6px 12px rgba(0,0,0,0.3);
-    }
+    @media(min-width: 1000px) { .grid { grid-template-columns: repeat(3, 1fr); } }
+    .card { background: #1e293b; border-radius: 10px; padding: 20px; text-align: center; box-shadow: 0 6px 12px rgba(0,0,0,0.3); }
     .big-number { font-size: 2rem; font-weight: bold; color: #facc15; }
-    table {
-      width: 100%;
-      border-collapse: collapse;
-      margin-top: 10px;
-      color: #f8fafc;
-    }
-    th, td {
-      border: 1px solid #334155;
-      padding: 8px;
-      text-align: left;
-    }
+    table { width: 100%; border-collapse: collapse; margin-top: 10px; color: #f8fafc; }
+    th, td { border: 1px solid #334155; padding: 8px; text-align: left; }
     th { background: #0f172a; }
     #map { height: 400px; border-radius: 10px; }
-    select {
-      padding: 8px;
-      border-radius: 6px;
-      border: none;
-      background: #334155;
-      color: #f8fafc;
-      margin-bottom: 15px;
-    }
+    select { padding: 8px; border-radius: 6px; border: none; background: #334155; color: #f8fafc; margin-bottom: 15px; }
   </style>
 </head>
 <body>
@@ -103,9 +69,10 @@
       const text = await resp.text();
       const lines = text.split(/\r?\n/).filter(l => l.trim().length);
 
-      const header = lines[0].split(',').map(h => h.trim());
+      // --- Parse CSV Robustly ---
+      const header = lines[0].split(',').map(h => h.replace(/"/g, '').trim());
       const rows = lines.slice(1).map(line => {
-        const cols = line.split(',');
+        const cols = line.split(',').map(c => c.replace(/"/g, '').trim());
         const obj = {};
         header.forEach((h,i)=> obj[h] = (cols[i] ?? '').trim());
         return obj;
@@ -117,14 +84,13 @@
       const COL_PROJECT = 'Project Name';
 
       const allData = rows.map(r => ({
-        State: r[COL_STATE],
-        Sector: r[COL_SECTOR],
-        Project: r[COL_PROJECT],
-        Amount: parseFloat(r[COL_AMOUNT]) || 0
+        State: r[COL_STATE].trim(),
+        Sector: r[COL_SECTOR].trim(),
+        Project: r[COL_PROJECT].trim(),
+        Amount: parseFloat(r[COL_AMOUNT].replace(/,/g,'')) || 0
       }));
 
       function updateDashboard(filteredData) {
-        // Totals
         const totalAmount = filteredData.reduce((sum, d) => sum + d.Amount, 0);
         document.getElementById('numProjects').textContent = filteredData.length;
         document.getElementById('numStates').textContent = new Set(filteredData.map(d => d.State)).size;
@@ -139,32 +105,26 @@
           options: { plugins:{ legend:{display:false}, tooltip:{enabled:false}, title:{display:true,text:`₹ ${totalAmount.toFixed(2)}`,color:'#facc15'} } }
         });
 
-        // Group by Sector
+        // Sector totals
         const sectorTotals = {};
         filteredData.forEach(d => { sectorTotals[d.Sector] = (sectorTotals[d.Sector]||0)+d.Amount; });
 
         if (sectorChart) sectorChart.destroy();
         sectorChart = new Chart(document.getElementById('sectorChart'), {
           type: 'doughnut',
-          data: {
-            labels: Object.keys(sectorTotals),
-            datasets: [{ data: Object.values(sectorTotals),
-              backgroundColor: ['#38bdf8','#34d399','#f87171','#fbbf24','#a78bfa','#f472b6'] }]
-          },
+          data: { labels: Object.keys(sectorTotals), datasets: [{ data: Object.values(sectorTotals),
+            backgroundColor: ['#38bdf8','#34d399','#f87171','#fbbf24','#a78bfa','#f472b6'] }] },
           options: { plugins: { title: { display: true, text: 'Amount Spent by Sector', color:'#f8fafc' } } }
         });
 
-        // Group by State
+        // State totals
         const stateTotals = {};
         filteredData.forEach(d => { stateTotals[d.State] = (stateTotals[d.State]||0)+d.Amount; });
 
         if (stateChart) stateChart.destroy();
         stateChart = new Chart(document.getElementById('stateChart'), {
           type: 'bar',
-          data: {
-            labels: Object.keys(stateTotals),
-            datasets: [{ label: 'CSR Spend (₹ Cr)', data: Object.values(stateTotals), backgroundColor: '#60a5fa' }]
-          },
+          data: { labels: Object.keys(stateTotals), datasets: [{ label: 'CSR Spend (₹ Cr)', data: Object.values(stateTotals), backgroundColor: '#60a5fa' }] },
           options: { plugins: { title: { display: true, text: 'Amount Spent by State', color:'#f8fafc' } },
             scales: { x: { ticks: { color:'#f8fafc' }}, y: { ticks: { color:'#f8fafc' }} }
           }
@@ -179,13 +139,12 @@
           tbody.appendChild(tr);
         });
 
-        // Map Update
+        // Map
         markers.forEach(m => m.remove());
         markers = [];
         Object.entries(stateTotals).forEach(([state, amt])=>{
-          // Simple centroid lookup (dummy lat/lng for demo, real app needs proper state coords)
           const coords = {
-            "Delhi":[28.61,77.23],"Maharashtra":[19.07,72.87],"Gujarat":[22.3,70.8],
+            "Andhra Pradesh":[15.91,79.74],"Delhi":[28.61,77.23],"Maharashtra":[19.07,72.87],"Gujarat":[22.3,70.8],
             "Uttar Pradesh":[26.8,80.9],"Tamil Nadu":[13.08,80.27],"Karnataka":[12.97,77.59]
           };
           if(coords[state]) {
@@ -197,26 +156,25 @@
         });
       }
 
-      // Populate dropdown
+      // Dropdown
       const stateFilter = document.getElementById('stateFilter');
       [...new Set(allData.map(d => d.State))].forEach(st=>{
         const opt=document.createElement('option');
         opt.value=st; opt.textContent=st;
         stateFilter.appendChild(opt);
       });
-
       stateFilter.addEventListener('change',()=>{
         const val = stateFilter.value;
         updateDashboard(val==="All"? allData : allData.filter(d=>d.State===val));
       });
 
-      // Initialize Map
-      map = L.map('map').setView([22.97, 78.65], 5); // India center
+      // Map init
+      map = L.map('map').setView([22.97, 78.65], 5);
       L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
         attribution: '&copy; OpenStreetMap contributors'
       }).addTo(map);
 
-      // Initial full update
+      // Run once
       updateDashboard(allData);
     }
 
