@@ -94,9 +94,10 @@
         const project=getCol(r,'project name');
         let amount=cleanAmount(getCol(r,amtHeaderNorm));
 
-        rawTotal+=amount; // always add original CSV amount (un-split)
+        // ✅ Only add once per row
+        if(!isNaN(amount)) rawTotal+=amount;
 
-        // Split for distribution
+        // Split for charts/maps/tables
         if(state.includes('&')){
           const parts=state.split('&').map(s=>s.trim());
           const splitAmt=amount/parts.length;
@@ -106,7 +107,7 @@
         }
       });
 
-      console.log("CSV Reported Total:",rawTotal.toFixed(4));
+      console.log("Sanity Check → Expected Total from CSV:", rawTotal.toFixed(4));
 
       // dropdown
       const stateFilter=document.getElementById('stateFilter');
@@ -121,7 +122,7 @@
     }
 
     function updateDashboard(filteredData,rawTotal){
-      // Always use raw CSV sum for total
+      // ✅ Always use raw CSV sum for total card
       document.getElementById('totalAmount').textContent=`₹ ${rawTotal.toFixed(4)}`;
       document.getElementById('numProjects').textContent=filteredData.length;
 
