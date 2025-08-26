@@ -7,7 +7,7 @@
 
   <!-- Chart.js -->
   <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.min.js"></script>
-  <!-- Leaflet.js for Map -->
+  <!-- Leaflet.js -->
   <link rel="stylesheet" href="https://unpkg.com/leaflet/dist/leaflet.css" />
   <script src="https://unpkg.com/leaflet/dist/leaflet.js"></script>
   <!-- PapaParse -->
@@ -145,7 +145,12 @@
     function updateDashboard(filteredData) {
       const totalAmount = filteredData.reduce((sum, d) => sum + d.Amount, 0);
       document.getElementById('numProjects').textContent = filteredData.length;
-      document.getElementById('numStates').textContent = new Set(filteredData.map(d => d.State)).size;
+
+      // Count unique states excluding PAN INDIA and MULTI STATE
+      const realStates = [...new Set(filteredData.map(d => d.State))].filter(s =>
+        s !== "PAN INDIA" && s !== "MULTI STATE"
+      );
+      document.getElementById('numStates').textContent = realStates.length;
 
       if (gaugeChart) gaugeChart.destroy();
       gaugeChart = new Chart(document.getElementById('gaugeChart'), {
