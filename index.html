@@ -86,11 +86,19 @@
 
       const rows = parsed.data;
 
+      // Find actual amount column (handles "Exp\n(INR Crore)")
+      const amountHeader = headers.find(h => h.includes("exp"));
+
       const allData = rows.map(r => ({
         State: getCol(r, 'state'),
         Sector: getCol(r, 'sector'),
         Project: getCol(r, 'project name'),
-        Amount: parseFloat(getCol(r, 'exp(inr crore)').replace(/,/g, '').replace(/"/g,'')) || 0
+        Amount: parseFloat(
+          (getCol(r, amountHeader) || '0')
+            .replace(/₹/g, '')
+            .replace(/,/g, '')
+            .trim()
+        ) || 0
       }));
 
       function updateDashboard(filteredData) {
