@@ -5,9 +5,8 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
   <title>ONGC CSR Spending Dashboard (2024-25)</title>
 
-  <!-- Chart.js + DataLabels -->
+  <!-- Chart.js -->
   <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.min.js"></script>
-  <script src="https://cdn.jsdelivr.net/npm/chartjs-plugin-datalabels@2.2.0"></script>
   <!-- Leaflet.js -->
   <link rel="stylesheet" href="https://unpkg.com/leaflet/dist/leaflet.css" />
   <script src="https://unpkg.com/leaflet/dist/leaflet.js"></script>
@@ -92,36 +91,51 @@
         const sector=getCol(r,'sector');
         const project=getCol(r,'project name');
         let amount=cleanAmount(getCol(r,amtHeaderNorm));
-        if(state.includes('&')){ const parts=state.split('&').map(s=>s.trim()); const splitAmt=amount/parts.length; parts.forEach(p=> data.push({State:p,Sector:sector,Project:project,Amount:splitAmt})); } 
-        else { data.push({State:state,Sector:sector,Project:project,Amount:amount}); }
+
+        // Split multi-state rows equally
+        if(state.includes('&')){
+          const parts=state.split('&').map(s=>s.trim());
+          const splitAmt=amount/parts.length;
+          parts.forEach(p=> data.push({State:p,Sector:sector,Project:project,Amount:splitAmt}));
+        } else {
+          data.push({State:state,Sector:sector,Project:project,Amount:amount});
+        }
       });
+
+      // Sanity check: CSV sum vs dashboard sum
+      const rawTotal=parsed.data.reduce((s,r)=>s+cleanAmount(getCol(r,amtHeaderNorm)),0);
+      console.log("CSV Reported Total:",rawTotal.toFixed(4));
 
       // dropdown
       const stateFilter=document.getElementById('stateFilter');
       [...new Set(data.map(d=>d.State))].sort().forEach(st=>{ const opt=document.createElement('option'); opt.value=st; opt.textContent=st; stateFilter.appendChild(opt); });
-      stateFilter.addEventListener('change',()=>{ const val=stateFilter.value; updateDashboard(val==="All"? data:data.filter(d=>d.State===val)); });
+      stateFilter.addEventListener('change',()=>{ const val=stateFilter.value; updateDashboard(val==="All"? data:data.filter(d=>d.State===val),rawTotal); });
 
       // init map
       map=L.map('map').setView([22.97,78.65],5);
       L.tileLayer('https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png',{ attribution:'&copy; OSM &copy; CARTO' }).addTo(map);
 
-      updateDashboard(data);
+      updateDashboard(data,rawTotal);
     }
 
-    function updateDashboard(filteredData){
+    function updateDashboard(filteredData,rawTotal){
       const totalAmount=filteredData.reduce((sum,d)=>sum+d.Amount,0);
       document.getElementById('totalAmount').textContent=`₹ ${totalAmount.toFixed(4)}`;
       document.getElementById('numProjects').textContent=filteredData.length;
       const realStates=[...new Set(filteredData.map(d=>d.State))].filter(s=>s!=="PAN INDIA" && s!=="MULTI STATE");
       document.getElementById('numStates').textContent=realStates.length;
 
+      // Sanity check
+      if(Math.abs(totalAmount-rawTotal)>0.01){
+        console.warn("⚠️ Mismatch detected! CSV total =",rawTotal,"Dashboard total =",totalAmount);
+      }
+
       // sector chart
       const sectorTotals={}; filteredData.forEach(d=>{ sectorTotals[d.Sector]=(sectorTotals[d.Sector]||0)+d.Amount; });
       if(sectorChart) sectorChart.destroy();
       sectorChart=new Chart(document.getElementById('sectorChart'),{ type:'doughnut',
         data:{ labels:Object.keys(sectorTotals), datasets:[{ data:Object.values(sectorTotals), backgroundColor:['#38bdf8','#34d399','#f87171','#fbbf24','#a78bfa','#f472b6','#facc15','#818cf8','#fb923c','#22d3ee'] }] },
-        options:{ plugins:{ legend:{position:'top',labels:{color:'#f8fafc'}}, datalabels:{formatter:(v)=>v>0?(v/totalAmount*100).toFixed(1)+'%':'',color:'#fff'}, title:{display:false} } },
-        plugins:[ChartDataLabels] });
+        options:{ plugins:{ legend:{position:'top',labels:{color:'#f8fafc'}}, tooltip:{callbacks:{label:(ctx)=>`${ctx.label}: ₹ ${ctx.raw.toFixed(2)}`}} } } });
 
       // state chart
       const stateTotals={}; filteredData.forEach(d=>{ stateTotals[d.State]=(stateTotals[d.State]||0)+d.Amount; });
@@ -129,7 +143,7 @@
       if(stateChart) stateChart.destroy();
       stateChart=new Chart(document.getElementById('stateChart'),{ type:'bar',
         data:{ labels:sortedStates.map(s=>s[0]), datasets:[{ label:'CSR Spend (₹ Cr)', data:sortedStates.map(s=>s[1]), backgroundColor:'#60a5fa' }] },
-        options:{ indexAxis:'y', plugins:{ legend:{display:false}, title:{display:false} }, scales:{ x:{ticks:{color:'#f8fafc'}}, y:{ticks:{color:'#f8fafc'}} } } });
+        options:{ indexAxis:'y', plugins:{ legend:{display:false}, tooltip:{callbacks:{label:(ctx)=>`₹ ${ctx.raw.toFixed(2)}`}} }, scales:{ x:{ticks:{color:'#f8fafc'}}, y:{ticks:{color:'#f8fafc'}} } } });
 
       // table
       const tbody=document.querySelector('#stateTable tbody'); tbody.innerHTML='';
@@ -145,8 +159,8 @@
         "MANIPUR":[24.81,93.94],"PAN INDIA":[22.97,78.65],"MULTI STATE":[21,82]};
       markers.forEach(m=>m.remove()); markers=[];
       Object.entries(stateTotals).forEach(([state,amt])=>{
-        if(coords[state]){ 
-          const radius=Math.sqrt(amt)*2; 
+        if(coords[state]){
+          const radius=Math.sqrt(amt)*2;
           const marker=L.circleMarker(coords[state],{radius:radius,color:'#facc15',fillColor:'#facc15',fillOpacity:0.6});
           marker.bindPopup(`<b>${state}</b><br>₹ ${amt.toFixed(2)} Cr`); marker.addTo(map); markers.push(marker);
         }
