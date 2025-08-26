@@ -85,19 +85,21 @@
       function getCol(row,name){ const idx=headers.indexOf(name.toLowerCase()); if(idx===-1) return ''; const key=parsed.meta.fields[idx]; return (row[key]||'').toString().trim(); }
 
       const amtHeaderNorm=headers.find(h=>h.includes("exp"));
-      let expandedData=[];
-      let rawTotal=0;
 
+      // ✅ Raw total (only from original CSV rows, no split)
+      let rawTotal=parsed.data.reduce((sum,r)=>{
+        let amt=cleanAmount(getCol(r,amtHeaderNorm));
+        return sum+(isNaN(amt)?0:amt);
+      },0);
+
+      // Expanded dataset for visuals
+      let expandedData=[];
       parsed.data.forEach(r=>{
         let state=getCol(r,'state').toUpperCase();
         const sector=getCol(r,'sector');
         const project=getCol(r,'project name');
         let amount=cleanAmount(getCol(r,amtHeaderNorm));
 
-        // ✅ Only add once per row
-        if(!isNaN(amount)) rawTotal+=amount;
-
-        // Split for charts/maps/tables
         if(state.includes('&')){
           const parts=state.split('&').map(s=>s.trim());
           const splitAmt=amount/parts.length;
@@ -107,7 +109,7 @@
         }
       });
 
-      console.log("Sanity Check → Expected Total from CSV:", rawTotal.toFixed(4));
+      console.log("CSV Reported Total:",rawTotal.toFixed(4)); // should print 904.2323
 
       // dropdown
       const stateFilter=document.getElementById('stateFilter');
@@ -122,7 +124,7 @@
     }
 
     function updateDashboard(filteredData,rawTotal){
-      // ✅ Always use raw CSV sum for total card
+      // ✅ Always use raw CSV sum for total
       document.getElementById('totalAmount').textContent=`₹ ${rawTotal.toFixed(4)}`;
       document.getElementById('numProjects').textContent=filteredData.length;
 
