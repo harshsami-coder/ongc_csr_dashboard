@@ -31,9 +31,7 @@
     .panel h3{margin:0 0 10px;font-size:1rem;font-weight:700}
     select{appearance:none;padding:10px 12px;border-radius:10px;border:1px solid #2a3546;background:#182030;color:var(--ink);min-width:220px}
     .controls{display:flex;gap:10px;align-items:center;margin:8px 0 0 0}
-    .chart-box{position:relative;height:400px}   /* 🔹 bigger donut chart */
-    .chart-box.tall{height:360px}
-    canvas{max-width:100% !important}
+    .chart-box{position:relative;height:400px}
     table{width:100%;border-collapse:collapse;font-size:13px}
     th,td{padding:8px 10px;border-bottom:1px solid #2a3546;text-align:left;white-space:nowrap}
     th{position:sticky;top:0;background:#162034;z-index:1}
@@ -70,8 +68,13 @@
         <div class="chart-box"><canvas id="sectorChart"></canvas></div>
       </div>
       <div class="panel">
-        <h3>Spending by State</h3>
-        <div class="chart-box tall"><canvas id="stateChart"></canvas></div>
+        <h3>CSR Projects (Table)</h3>
+        <div class="scroll">
+          <table id="projectTable">
+            <thead><tr><th>Project Name</th><th>Amount (₹ Cr)</th></tr></thead>
+            <tbody></tbody>
+          </table>
+        </div>
       </div>
     </section>
 
@@ -94,7 +97,7 @@
   </div>
 
   <script>
-    let sectorChart, stateChart, map, markers = [];
+    let sectorChart, map, markers = [];
 
     const fmtMoney = v => `₹ ${Number(v).toFixed(4)}`;
     const toNum = s => (typeof s === 'number') ? s : (parseFloat(String(s||'0').replace(/[^0-9.\-]/g,'')) || 0);
@@ -110,6 +113,7 @@
       "MANIPUR":[24.81,93.94],"PAN INDIA":[22.97,78.65],"MULTI STATE":[21,82]
     };
 
+    let rawRows = [];
     async function init() {
       const resp = await fetch('csr_data.csv');
       const csv = await resp.text();
@@ -120,8 +124,7 @@
       const COL_SECT  = parsed.meta.fields.find(h => h.toLowerCase().trim() === 'sector');
       const COL_AMT   = parsed.meta.fields.find(h => h.toLowerCase().includes('exp'));
 
-      // Build raw rows (fixing outlier)
-      const rawRows = parsed.data.map(r => {
+      rawRows = parsed.data.map(r => {
         const state  = norm(r[COL_STATE]).toUpperCase();
         const proj   = norm(r[COL_PROJ]);
         const sector = norm(r[COL_SECT]);
@@ -130,7 +133,6 @@
         return { state, project: proj, sector, amount };
       });
 
-      // KPIs
       const totalAmount   = rawRows.reduce((s,r)=>s+r.amount,0);
       const totalProjects = rawRows.length;
       const envTotal = rawRows.filter(r => r.sector.toLowerCase() === 'environment').reduce((s,r)=>s+r.amount,0);
@@ -141,87 +143,44 @@
       document.getElementById('kpiEnv').textContent = fmtMoney(envTotal);
       document.getElementById('kpiEnvShare').textContent = `${envShare.toFixed(2)}%`;
 
-      // Expand rows for visuals
-      const data = [];
-      rawRows.forEach(r => {
-        if (r.state.includes('&')) {
-          const parts = r.state.split('&').map(x => x.trim().toUpperCase());
-          const share = r.amount / parts.length;
-          parts.forEach(p => data.push({ state:p, sector:r.sector || 'Others', amount:share }));
-        } else {
-          data.push({ state:r.state, sector:r.sector || 'Others', amount:r.amount });
-        }
-      });
-
-      // Populate state filter
       const stateSel = document.getElementById('stateSel');
-      [...new Set(data.map(d=>d.state))].sort().forEach(st=>{
+      [...new Set(rawRows.map(d=>d.state))].sort().forEach(st=>{
         const o=document.createElement('option'); o.value=st; o.textContent=st; stateSel.appendChild(o);
       });
       stateSel.addEventListener('change', ()=>{
         const val = stateSel.value;
-        updateChartsAndTables(val==='__ALL__'? data : data.filter(d=>d.state===val));
+        updateChartsAndTables(val==='__ALL__'? rawRows : rawRows.filter(d=>d.state===val));
       });
 
-      // Map
       map = L.map('map').setView([22.97,78.65], 5);
       L.tileLayer('https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png', { attribution:'&copy; OpenStreetMap &copy; CARTO' }).addTo(map);
 
-      // Render
-      updateChartsAndTables(data);
+      updateChartsAndTables(rawRows);
     }
 
     function updateChartsAndTables(rows){
-      // Sector totals
       const sectorTotals = {};
       rows.forEach(d => sectorTotals[d.sector] = (sectorTotals[d.sector]||0) + d.amount);
 
-      // Donut (bigger, no legend, % in tooltip)
       if (sectorChart) sectorChart.destroy();
       sectorChart = new Chart(document.getElementById('sectorChart'), {
         type: 'doughnut',
-        data: {
-          labels: Object.keys(sectorTotals),
-          datasets: [{
-            data: Object.values(sectorTotals),
-            backgroundColor: ['#00c2ff','#28c76f','#ea5455','#f7b731','#9b59b6','#ff6b81','#54a0ff','#1dd1a1','#e17055','#ffeaa7','#a29bfe','#ff9f43'],
-            borderColor: '#0b1220', borderWidth: 3
-          }]
-        },
-        options: {
-          maintainAspectRatio:false,
-          plugins:{ 
-            legend:{display:false}, 
-            tooltip:{callbacks:{ 
-              label:(ctx)=>{
-                const total = ctx.dataset.data.reduce((a,b)=>a+b,0);
-                const pct = total ? ((ctx.raw/total)*100).toFixed(1) : 0;
-                return `₹ ${ctx.raw.toFixed(2)} Cr (${pct}%)`;
-              } 
-            }} 
-          },
-          cutout:'75%'
-        }
+        data: { labels: Object.keys(sectorTotals), datasets:[{ data: Object.values(sectorTotals), backgroundColor:['#00c2ff','#28c76f','#ea5455','#f7b731','#9b59b6','#ff6b81','#54a0ff','#1dd1a1','#e17055','#ffeaa7','#a29bfe','#ff9f43'], borderColor:'#0b1220', borderWidth:3 }] },
+        options: { maintainAspectRatio:false, plugins:{ legend:{display:false}, tooltip:{callbacks:{ label:(ctx)=>{ const total = ctx.dataset.data.reduce((a,b)=>a+b,0); const pct = total ? ((ctx.raw/total)*100).toFixed(1):0; return `₹ ${ctx.raw.toFixed(2)} Cr (${pct}%)`; }}}}, cutout:'75%' }
       });
 
-      // State totals
+      // Project Table
+      const projectBody = document.querySelector('#projectTable tbody'); projectBody.innerHTML='';
+      rows.forEach(r=>{
+        const tr=document.createElement('tr');
+        tr.innerHTML=`<td>${r.project}</td><td>${r.amount.toFixed(2)}</td>`;
+        projectBody.appendChild(tr);
+      });
+
+      // State Table
       const stateTotals = {};
       rows.forEach(d => stateTotals[d.state] = (stateTotals[d.state]||0) + d.amount);
       const sorted = Object.entries(stateTotals).sort((a,b)=>b[1]-a[1]);
-
-      if (stateChart) stateChart.destroy();
-      stateChart = new Chart(document.getElementById('stateChart'), {
-        type:'bar',
-        data:{ labels:sorted.map(s=>s[0]), datasets:[{ label:'Amount (₹ Cr)', data:sorted.map(s=>s[1]), backgroundColor:'#4da3ff' }] },
-        options:{
-          indexAxis:'y',
-          maintainAspectRatio:false,
-          plugins:{ legend:{display:false}, tooltip:{callbacks:{ label:(ctx)=>`₹ ${ctx.raw.toFixed(2)} Cr` }} },
-          scales:{ x:{ticks:{color:'#e8edf6'}}, y:{ticks:{color:'#e8edf6'}} }
-        }
-      });
-
-      // Table
       const tbody = document.querySelector('#stateTable tbody'); tbody.innerHTML='';
       sorted.forEach(([st,val])=>{
         const tr=document.createElement('tr'); tr.innerHTML=`<td>${st}</td><td>${val.toFixed(2)}</td>`; tbody.appendChild(tr);
