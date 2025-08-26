@@ -19,6 +19,7 @@
     body{margin:0;font-family:Inter,system-ui,Segoe UI,Roboto,Arial,sans-serif;background:var(--bg);color:var(--ink)}
     header{padding:18px 12px;text-align:center;border-bottom:1px solid #2a3546}
     header h1{margin:0;font-size:1.4rem;font-weight:700;letter-spacing:.2px}
+    header .byline{margin-top:6px;font-size:0.95rem;color:#9aa6b2;font-weight:600}
     .wrap{max-width:1200px;margin:0 auto;padding:16px}
     .kpis{display:grid;gap:14px;grid-template-columns:repeat(4,1fr)}
     .kpi{background:var(--panel);border-radius:var(--panel-radius);padding:16px 18px;box-shadow:0 8px 24px rgba(0,0,0,.25)}
@@ -51,14 +52,12 @@
     .scroll::-webkit-scrollbar-thumb:hover {background: #777;}
 
     #map{height:360px;border-radius:12px;margin-top:8px}
-
-    /* 🔹 Footer attribution */
-    footer{margin-top:16px;text-align:center;color:#9aa6b2;font-size:13px}
   </style>
 </head>
 <body>
   <header>
     <h1>Oil and Natural Gas Corporation CSR Spending Dashboard (2024-25)</h1>
+    <div class="byline">Made by <b>Harsh Raj</b></div>
   </header>
 
   <div class="wrap">
@@ -108,10 +107,6 @@
         <div id="map"></div>
       </div>
     </section>
-
-    <footer>
-      Made by <b>Harsh Raj</b>
-    </footer>
   </div>
 
   <script>
