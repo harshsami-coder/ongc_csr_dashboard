@@ -36,18 +36,20 @@
     th,td{padding:8px 10px;border-bottom:1px solid #2a3546;text-align:left;white-space:nowrap}
     th{position:sticky;top:0;background:#162034;z-index:1}
     
-    /* 🔹 Uniform scrollable panels */
+    /* 🔹 Scrollable tables (both directions) */
     .scroll{
-      max-height:350px;
-      overflow-y:auto;
-      overflow-x:hidden;
+      max-height:350px;      /* height limit */
+      overflow-y:auto;       /* vertical scroll */
+      overflow-x:auto;       /* horizontal scroll */
       border:1px solid #2a3546;
       border-radius:10px;
+      white-space:nowrap;    /* prevent wrapping */
     }
 
     /* 🔹 Custom slim scrollbar */
     .scroll::-webkit-scrollbar {
-      width: 8px;
+      width: 8px;   /* vertical */
+      height: 8px;  /* horizontal */
     }
     .scroll::-webkit-scrollbar-track {
       background: #1c2635;
