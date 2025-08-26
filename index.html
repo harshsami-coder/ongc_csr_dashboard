@@ -10,7 +10,7 @@
   <!-- Leaflet.js for Map -->
   <link rel="stylesheet" href="https://unpkg.com/leaflet/dist/leaflet.css" />
   <script src="https://unpkg.com/leaflet/dist/leaflet.js"></script>
-  <!-- PapaParse for robust CSV parsing -->
+  <!-- PapaParse -->
   <script src="https://cdn.jsdelivr.net/npm/papaparse@5.4.1/papaparse.min.js"></script>
 
   <style>
@@ -39,7 +39,7 @@
     <div class="grid">
       <div class="card"><canvas id="gaugeChart"></canvas><h3>Total Amount Spent (₹ Cr)</h3></div>
       <div class="card"><h3>Number of CSR Projects</h3><div class="big-number" id="numProjects">0</div></div>
-      <div class="card"><h3>Number of States</h3><div class="big-number" id="numStates">0</div></div>
+      <div class="card"><h3>No. of States and Union Territories Invested</h3><div class="big-number" id="numStates">0</div></div>
     </div>
 
     <h3>Filter by State:</h3>
@@ -52,7 +52,7 @@
       <div class="card">
         <h3>CSR Spending by State (Table)</h3>
         <table id="stateTable">
-          <thead><tr><th>State</th><th>Amount (₹ Cr)</th></tr></thead>
+          <thead><tr><th>State / UT</th><th>Amount (₹ Cr)</th></tr></thead>
           <tbody></tbody>
         </table>
       </div>
@@ -79,11 +79,8 @@
     async function init() {
       const resp = await fetch('csr_data.csv');
       const csvText = await resp.text();
-
-      // Parse CSV robustly
       const parsed = Papa.parse(csvText, { header: true, skipEmptyLines: true });
 
-      // Normalize headers
       const normalize = str => String(str || '').replace(/"/g, '').trim().toLowerCase();
       const headers = parsed.meta.fields.map(normalize);
 
@@ -94,47 +91,35 @@
         return (row[key] || '').toString().trim();
       }
 
-      const rows = parsed.data;
-
-      // Find actual amount header (handles "Exp\n(INR Crore)")
       const amtHeaderNorm = headers.find(h => h.includes("exp"));
       if (!amtHeaderNorm) {
         alert('Could not find amount column (Exp (INR Crore)) in CSV.');
         return;
       }
 
-      // Build raw data
-      let data = rows.map(r => ({
-        State: getCol(r, 'state').toUpperCase(),
-        Sector: getCol(r, 'sector'),
-        Project: getCol(r, 'project name'),
-        Amount: cleanAmount(getCol(r, amtHeaderNorm))
-      }));
+      let data = [];
+      parsed.data.forEach(r => {
+        let state = getCol(r, 'state').toUpperCase();
+        const sector = getCol(r, 'sector');
+        const project = getCol(r, 'project name');
+        let amount = cleanAmount(getCol(r, amtHeaderNorm));
 
-      // ---- Data quality correction (focused, minimal) ----
-      // If you want to remove this correction, just delete this block.
-      const corrections = [
-        {
-          when: d =>
-            d.State.includes('ANDHRA PRADESH') &&
-            d.Project.toUpperCase().includes('BOLERO VAN') &&
-            d.Amount >= 90, // obvious outlier for a vehicle
-          fix: 0.098 // 9.8 lakh as ₹0.098 Cr
+        // Correct Bolero Van outlier
+        if (state.includes('ANDHRA PRADESH') && project.toUpperCase().includes('BOLERO VAN') && amount >= 90) {
+          amount = 0.098;
         }
-      ];
-      let corrected = false;
-      data = data.map(d => {
-        for (const rule of corrections) {
-          if (rule.when(d)) { d.Amount = rule.fix; corrected = true; break; }
+
+        // If state has "&", split and divide equally
+        if (state.includes('&')) {
+          const parts = state.split('&').map(s => s.trim());
+          const splitAmt = amount / parts.length;
+          parts.forEach(p => {
+            data.push({ State: p, Sector: sector, Project: project, Amount: splitAmt });
+          });
+        } else {
+          data.push({ State: state, Sector: sector, Project: project, Amount: amount });
         }
-        return d;
       });
-
-      // Show a small note if correction applied
-      const dqNote = document.getElementById('dqNote');
-      dqNote.textContent = corrected
-        ? 'Note: Detected and corrected an outlier entry (Andhra Pradesh – Bolero Van). Amount set to ₹ 0.098 Cr.'
-        : '';
 
       // Populate dropdown
       const stateFilter = document.getElementById('stateFilter');
@@ -143,7 +128,6 @@
         opt.value=st; opt.textContent=st;
         stateFilter.appendChild(opt);
       });
-
       stateFilter.addEventListener('change',()=>{
         const val = stateFilter.value;
         updateDashboard(val==="All"? data : data.filter(d=>d.State===val));
@@ -155,7 +139,6 @@
         attribution: '&copy; OpenStreetMap contributors'
       }).addTo(map);
 
-      // First render
       updateDashboard(data);
     }
 
@@ -164,7 +147,6 @@
       document.getElementById('numProjects').textContent = filteredData.length;
       document.getElementById('numStates').textContent = new Set(filteredData.map(d => d.State)).size;
 
-      // Gauge chart
       if (gaugeChart) gaugeChart.destroy();
       gaugeChart = new Chart(document.getElementById('gaugeChart'), {
         type: 'doughnut',
@@ -174,7 +156,6 @@
         options: { plugins:{ legend:{display:false}, tooltip:{enabled:false}, title:{display:true,text:`₹ ${totalAmount.toFixed(4)}`,color:'#facc15'} } }
       });
 
-      // Sector totals
       const sectorTotals = {};
       filteredData.forEach(d => { sectorTotals[d.Sector] = (sectorTotals[d.Sector]||0)+d.Amount; });
 
@@ -186,7 +167,6 @@
         options: { plugins: { title: { display: true, text: 'Amount Spent by Sector', color:'#f8fafc' } } }
       });
 
-      // State totals
       const stateTotals = {};
       filteredData.forEach(d => { stateTotals[d.State] = (stateTotals[d.State]||0)+d.Amount; });
 
@@ -199,7 +179,6 @@
         }
       });
 
-      // Table
       const tbody = document.querySelector('#stateTable tbody');
       tbody.innerHTML = '';
       Object.entries(stateTotals).forEach(([state, amt])=>{
@@ -208,7 +187,6 @@
         tbody.appendChild(tr);
       });
 
-      // Map (basic coords; expand later if you want all states)
       const coords = {
         "ANDHRA PRADESH":[15.91,79.74],"DELHI":[28.61,77.23],"MAHARASHTRA":[19.07,72.87],"GUJARAT":[22.3,70.8],
         "UTTAR PRADESH":[26.8,80.9],"TAMIL NADU":[13.08,80.27],"KARNATAKA":[12.97,77.59],
@@ -217,7 +195,8 @@
         "BIHAR":[25.6,85.1],"UTTARAKHAND":[30.32,78.03],"RAJASTHAN":[26.9,75.8],
         "ODISHA":[20.27,85.84],"WEST BENGAL":[22.57,88.36],"HARYANA":[28.46,77.02],
         "CHHATTISGARH":[21.25,81.63],"HIMACHAL PRADESH":[31.1,77.17],"TRIPURA":[23.84,91.28],
-        "KERALA":[9.93,76.27],"TELANGANA":[17.38,78.48],"MADHYA PRADESH":[23.26,77.41]
+        "MADHYA PRADESH":[23.26,77.41],"GOA":[15.49,73.82],"NAGALAND":[26.16,94.56],
+        "CHANDIGARH":[30.73,76.78],"MANIPUR":[24.81,93.94]
       };
       markers.forEach(m => m.remove());
       markers = [];
