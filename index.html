@@ -31,17 +31,13 @@
     .panel h3{margin:0 0 10px;font-size:1rem;font-weight:700}
     select{appearance:none;padding:10px 12px;border-radius:10px;border:1px solid #2a3546;background:#182030;color:var(--ink);min-width:220px}
     .controls{display:flex;gap:10px;align-items:center;margin:8px 0 0 0}
-
-    /* Chart sizes */
-    .chart-box{position:relative;height:320px}   /* bigger donut */
+    .chart-box{position:relative;height:400px}   /* 🔹 bigger donut chart */
     .chart-box.tall{height:360px}
     canvas{max-width:100% !important}
-
     table{width:100%;border-collapse:collapse;font-size:13px}
     th,td{padding:8px 10px;border-bottom:1px solid #2a3546;text-align:left;white-space:nowrap}
     th{position:sticky;top:0;background:#162034;z-index:1}
     .scroll{max-height:300px;overflow:auto;border:1px solid #2a3546;border-radius:10px}
-
     #map{height:360px;border-radius:12px;margin-top:8px}
     .footnote{margin-top:10px;color:#8fa2b5;text-align:center;font-size:12px}
   </style>
@@ -124,7 +120,7 @@
       const COL_SECT  = parsed.meta.fields.find(h => h.toLowerCase().trim() === 'sector');
       const COL_AMT   = parsed.meta.fields.find(h => h.toLowerCase().includes('exp'));
 
-      // Raw rows
+      // Build raw rows (fixing outlier)
       const rawRows = parsed.data.map(r => {
         const state  = norm(r[COL_STATE]).toUpperCase();
         const proj   = norm(r[COL_PROJ]);
@@ -145,7 +141,7 @@
       document.getElementById('kpiEnv').textContent = fmtMoney(envTotal);
       document.getElementById('kpiEnvShare').textContent = `${envShare.toFixed(2)}%`;
 
-      // Expanded rows
+      // Expand rows for visuals
       const data = [];
       rawRows.forEach(r => {
         if (r.state.includes('&')) {
@@ -157,7 +153,7 @@
         }
       });
 
-      // State filter
+      // Populate state filter
       const stateSel = document.getElementById('stateSel');
       [...new Set(data.map(d=>d.state))].sort().forEach(st=>{
         const o=document.createElement('option'); o.value=st; o.textContent=st; stateSel.appendChild(o);
@@ -171,7 +167,7 @@
       map = L.map('map').setView([22.97,78.65], 5);
       L.tileLayer('https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png', { attribution:'&copy; OpenStreetMap &copy; CARTO' }).addTo(map);
 
-      // First render
+      // Render
       updateChartsAndTables(data);
     }
 
@@ -180,7 +176,7 @@
       const sectorTotals = {};
       rows.forEach(d => sectorTotals[d.sector] = (sectorTotals[d.sector]||0) + d.amount);
 
-      // Donut chart with % share in legend
+      // Donut (bigger, no legend, % in tooltip)
       if (sectorChart) sectorChart.destroy();
       sectorChart = new Chart(document.getElementById('sectorChart'), {
         type: 'doughnut',
@@ -194,40 +190,17 @@
         },
         options: {
           maintainAspectRatio:false,
-          plugins:{
-            legend:{
-              display:true,
-              labels:{
-                color:'#e8edf6',
-                generateLabels: (chart) => {
-                  const data = chart.data;
-                  const dataset = data.datasets[0];
-                  const total = dataset.data.reduce((a,b)=>a+b,0);
-                  return data.labels.map((label,i)=>{
-                    const value = dataset.data[i];
-                    const pct = total ? ((value/total)*100).toFixed(1) : 0;
-                    return {
-                      text: `${label} (${pct}%)`,
-                      fillStyle: dataset.backgroundColor[i],
-                      strokeStyle: dataset.backgroundColor[i],
-                      hidden: isNaN(value) || value === 0,
-                      index: i
-                    };
-                  });
-                }
-              }
-            },
-            tooltip:{
-              callbacks:{
-                label:(ctx)=>{
-                  const total = ctx.dataset.data.reduce((a,b)=>a+b,0);
-                  const pct = total ? ((ctx.raw/total)*100).toFixed(1) : 0;
-                  return `₹ ${ctx.raw.toFixed(2)} Cr (${pct}%)`;
-                }
-              }
-            }
+          plugins:{ 
+            legend:{display:false}, 
+            tooltip:{callbacks:{ 
+              label:(ctx)=>{
+                const total = ctx.dataset.data.reduce((a,b)=>a+b,0);
+                const pct = total ? ((ctx.raw/total)*100).toFixed(1) : 0;
+                return `₹ ${ctx.raw.toFixed(2)} Cr (${pct}%)`;
+              } 
+            }} 
           },
-          cutout:'60%'
+          cutout:'75%'
         }
       });
 
