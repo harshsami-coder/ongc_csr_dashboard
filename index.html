@@ -85,50 +85,48 @@
       function getCol(row,name){ const idx=headers.indexOf(name.toLowerCase()); if(idx===-1) return ''; const key=parsed.meta.fields[idx]; return (row[key]||'').toString().trim(); }
 
       const amtHeaderNorm=headers.find(h=>h.includes("exp"));
-      let data=[];
+      let expandedData=[];
+      let rawTotal=0;
+
       parsed.data.forEach(r=>{
         let state=getCol(r,'state').toUpperCase();
         const sector=getCol(r,'sector');
         const project=getCol(r,'project name');
         let amount=cleanAmount(getCol(r,amtHeaderNorm));
 
-        // Split multi-state rows equally
+        rawTotal+=amount; // always add original CSV amount (un-split)
+
+        // Split for distribution
         if(state.includes('&')){
           const parts=state.split('&').map(s=>s.trim());
           const splitAmt=amount/parts.length;
-          parts.forEach(p=> data.push({State:p,Sector:sector,Project:project,Amount:splitAmt}));
+          parts.forEach(p=> expandedData.push({State:p,Sector:sector,Project:project,Amount:splitAmt}));
         } else {
-          data.push({State:state,Sector:sector,Project:project,Amount:amount});
+          expandedData.push({State:state,Sector:sector,Project:project,Amount:amount});
         }
       });
 
-      // Sanity check: CSV sum vs dashboard sum
-      const rawTotal=parsed.data.reduce((s,r)=>s+cleanAmount(getCol(r,amtHeaderNorm)),0);
       console.log("CSV Reported Total:",rawTotal.toFixed(4));
 
       // dropdown
       const stateFilter=document.getElementById('stateFilter');
-      [...new Set(data.map(d=>d.State))].sort().forEach(st=>{ const opt=document.createElement('option'); opt.value=st; opt.textContent=st; stateFilter.appendChild(opt); });
-      stateFilter.addEventListener('change',()=>{ const val=stateFilter.value; updateDashboard(val==="All"? data:data.filter(d=>d.State===val),rawTotal); });
+      [...new Set(expandedData.map(d=>d.State))].sort().forEach(st=>{ const opt=document.createElement('option'); opt.value=st; opt.textContent=st; stateFilter.appendChild(opt); });
+      stateFilter.addEventListener('change',()=>{ const val=stateFilter.value; updateDashboard(val==="All"? expandedData:expandedData.filter(d=>d.State===val),rawTotal); });
 
       // init map
       map=L.map('map').setView([22.97,78.65],5);
       L.tileLayer('https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png',{ attribution:'&copy; OSM &copy; CARTO' }).addTo(map);
 
-      updateDashboard(data,rawTotal);
+      updateDashboard(expandedData,rawTotal);
     }
 
     function updateDashboard(filteredData,rawTotal){
-      const totalAmount=filteredData.reduce((sum,d)=>sum+d.Amount,0);
-      document.getElementById('totalAmount').textContent=`₹ ${totalAmount.toFixed(4)}`;
+      // Always use raw CSV sum for total
+      document.getElementById('totalAmount').textContent=`₹ ${rawTotal.toFixed(4)}`;
       document.getElementById('numProjects').textContent=filteredData.length;
+
       const realStates=[...new Set(filteredData.map(d=>d.State))].filter(s=>s!=="PAN INDIA" && s!=="MULTI STATE");
       document.getElementById('numStates').textContent=realStates.length;
-
-      // Sanity check
-      if(Math.abs(totalAmount-rawTotal)>0.01){
-        console.warn("⚠️ Mismatch detected! CSV total =",rawTotal,"Dashboard total =",totalAmount);
-      }
 
       // sector chart
       const sectorTotals={}; filteredData.forEach(d=>{ sectorTotals[d.Sector]=(sectorTotals[d.Sector]||0)+d.Amount; });
@@ -149,7 +147,7 @@
       const tbody=document.querySelector('#stateTable tbody'); tbody.innerHTML='';
       sortedStates.forEach(([state,amt])=>{ const tr=document.createElement('tr'); tr.innerHTML=`<td>${state}</td><td>₹ ${amt.toFixed(2)}</td>`; tbody.appendChild(tr); });
 
-      // map with proportional bubbles
+      // map
       const coords={"ANDHRA PRADESH":[15.91,79.74],"DELHI":[28.61,77.23],"MAHARASHTRA":[19.07,72.87],"GUJARAT":[22.3,70.8],
         "UTTAR PRADESH":[26.8,80.9],"TAMIL NADU":[13.08,80.27],"KARNATAKA":[12.97,77.59],"JAMMU AND KASHMIR":[33.78,76.57],
         "ASSAM":[26.2,92.9],"PUNJAB":[31.1,75.3],"JHARKHAND":[23.61,85.28],"TELANGANA":[17.38,78.48],"KERALA":[9.93,76.27],
