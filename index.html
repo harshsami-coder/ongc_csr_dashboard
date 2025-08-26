@@ -31,7 +31,7 @@
     .panel h3{margin:0 0 10px;font-size:1rem;font-weight:700}
     select{appearance:none;padding:10px 12px;border-radius:10px;border:1px solid #2a3546;background:#182030;color:var(--ink);min-width:220px}
     .controls{display:flex;gap:10px;align-items:center;margin:8px 0 0 0}
-    .chart-box{position:relative;height:220px}   /* smaller donut */
+    .chart-box{position:relative;height:320px}   /* bigger donut */
     .chart-box.tall{height:360px}
     canvas{max-width:100% !important}
     table{width:100%;border-collapse:collapse;font-size:13px}
@@ -120,25 +120,18 @@
       const COL_SECT  = parsed.meta.fields.find(h => h.toLowerCase().trim() === 'sector');
       const COL_AMT   = parsed.meta.fields.find(h => h.toLowerCase().includes('exp'));
 
-      // Build raw rows (NO splitting). Fix known outlier.
-      const rawRows = parsed.data.map(r => {
-        const state  = norm(r[COL_STATE]).toUpperCase();
-        const proj   = norm(r[COL_PROJ]);
-        const sector = norm(r[COL_SECT]);
-        let amount   = toNum(r[COL_AMT]);
+      // Build raw rows
+      const rawRows = parsed.data.map(r => ({
+        state: norm(r[COL_STATE]).toUpperCase(),
+        project: norm(r[COL_PROJ]),
+        sector: norm(r[COL_SECT]),
+        amount: toNum(r[COL_AMT])
+      }));
 
-        // --- Outlier fix: "Bolero Van" accidentally logged ~₹98 Cr instead of ₹0.098 Cr.
-        if (proj.toUpperCase().includes('BOLERO VAN') && amount >= 90) amount = 0.098;
-
-        return { state, project: proj, sector, amount };
-      });
-
-      // Global KPIs from the un-split raw rows (exactly match the CSV after fixes)
+      // KPIs
       const totalAmount   = rawRows.reduce((s,r)=>s+r.amount,0);
       const totalProjects = rawRows.length;
-      const envTotal = rawRows
-        .filter(r => r.sector.toLowerCase() === 'environment')
-        .reduce((s,r)=>s+r.amount,0);
+      const envTotal = rawRows.filter(r => r.sector.toLowerCase() === 'environment').reduce((s,r)=>s+r.amount,0);
       const envShare = totalAmount ? (envTotal/totalAmount*100) : 0;
 
       document.getElementById('kpiTotal').textContent = fmtMoney(totalAmount);
@@ -146,7 +139,7 @@
       document.getElementById('kpiEnv').textContent = fmtMoney(envTotal);
       document.getElementById('kpiEnvShare').textContent = `${envShare.toFixed(2)}%`;
 
-      // Now expand rows for visuals: split "A & B" states equally
+      // Expand rows for visuals
       const data = [];
       rawRows.forEach(r => {
         if (r.state.includes('&')) {
@@ -174,17 +167,15 @@
 
       // Initial render
       updateChartsAndTables(data);
-
-      // For quick verification in browser console
-      console.log('Total from CSV after fixes =', totalAmount.toFixed(4));
     }
 
     function updateChartsAndTables(rows){
       // Sector totals
       const sectorTotals = {};
       rows.forEach(d => sectorTotals[d.sector] = (sectorTotals[d.sector]||0) + d.amount);
+      const total = Object.values(sectorTotals).reduce((a,b)=>a+b,0);
 
-      // Donut (smaller)
+      // Donut chart
       if (sectorChart) sectorChart.destroy();
       sectorChart = new Chart(document.getElementById('sectorChart'), {
         type: 'doughnut',
@@ -192,18 +183,42 @@
           labels: Object.keys(sectorTotals),
           datasets: [{
             data: Object.values(sectorTotals),
-            backgroundColor: ['#00c2ff','#28c76f','#ea5455','#f7b731','#9b59b6','#ff6b81','#54a0ff','#1dd1a1','#e17055','#ffeaa7','#a29bfe','#ff9f43'],
+            backgroundColor: ['#00c2ff','#28c76f','#ea5455','#f7b731','#9b59b6',
+                              '#ff6b81','#54a0ff','#1dd1a1','#e17055','#ffeaa7',
+                              '#a29bfe','#ff9f43'],
             borderColor: '#0b1220', borderWidth: 3
           }]
         },
         options: {
-          maintainAspectRatio:false,
-          plugins:{ legend:{display:false}, tooltip:{callbacks:{ label:(ctx)=>`₹ ${ctx.raw.toFixed(2)} Cr` }} },
-          cutout:'72%'
+          responsive: true,
+          maintainAspectRatio: false,
+          plugins: {
+            legend: {
+              position: 'right',
+              labels: {
+                color: '#e8edf6',
+                generateLabels: (chart) => {
+                  const data = chart.data;
+                  return data.labels.map((label, i) => {
+                    const value = data.datasets[0].data[i];
+                    const pct = total ? ((value/total)*100).toFixed(1) : 0;
+                    return {
+                      text: `${label} (${pct}%)`,
+                      fillStyle: data.datasets[0].backgroundColor[i],
+                      strokeStyle: '#0b1220',
+                      lineWidth: 2
+                    };
+                  });
+                }
+              }
+            },
+            tooltip: { callbacks:{ label:(ctx)=>`${ctx.label}: ₹ ${ctx.raw.toFixed(2)} Cr` } }
+          },
+          cutout: '55%'   // thicker ring
         }
       });
 
-      // State totals (sorted desc)
+      // State totals
       const stateTotals = {};
       rows.forEach(d => stateTotals[d.state] = (stateTotals[d.state]||0) + d.amount);
       const sorted = Object.entries(stateTotals).sort((a,b)=>b[1]-a[1]);
