@@ -72,13 +72,25 @@
 
       // Parse CSV with PapaParse
       const parsed = Papa.parse(csvText, { header: true, skipEmptyLines: true });
+
+      // Normalize headers
+      const normalize = str => str.replace(/"/g, '').trim().toLowerCase();
+      const headers = parsed.meta.fields.map(normalize);
+
+      function getCol(row, name) {
+        const idx = headers.indexOf(name.toLowerCase());
+        if (idx === -1) return '';
+        const key = parsed.meta.fields[idx];
+        return (row[key] || '').trim();
+      }
+
       const rows = parsed.data;
 
       const allData = rows.map(r => ({
-        State: (r['State'] || '').trim(),
-        Sector: (r['Sector'] || '').trim(),
-        Project: (r['Project Name'] || '').trim(),
-        Amount: parseFloat((r['Exp(INR Crore)'] || '0').replace(/,/g, '')) || 0
+        State: getCol(r, 'state'),
+        Sector: getCol(r, 'sector'),
+        Project: getCol(r, 'project name'),
+        Amount: parseFloat(getCol(r, 'exp(inr crore)').replace(/,/g, '').replace(/"/g,'')) || 0
       }));
 
       function updateDashboard(filteredData) {
@@ -91,7 +103,7 @@
         gaugeChart = new Chart(document.getElementById('gaugeChart'), {
           type: 'doughnut',
           data: { labels: ['Spent','Remaining'],
-            datasets: [{ data: [totalAmount, Math.max(0,2000-totalAmount)], // raised cap to avoid negative
+            datasets: [{ data: [totalAmount, Math.max(0,2000-totalAmount)],
               backgroundColor: ['#38bdf8','#334155'], cutout:'70%', circumference: 180, rotation: 270 }] },
           options: { plugins:{ legend:{display:false}, tooltip:{enabled:false}, title:{display:true,text:`₹ ${totalAmount.toFixed(2)}`,color:'#facc15'} } }
         });
