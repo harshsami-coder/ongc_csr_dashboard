@@ -32,36 +32,24 @@
     select{appearance:none;padding:10px 12px;border-radius:10px;border:1px solid #2a3546;background:#182030;color:var(--ink);min-width:220px}
     .controls{display:flex;gap:10px;align-items:center;margin:8px 0 0 0}
     .chart-box{position:relative;height:400px}
-    table{width:100%;border-collapse:collapse;font-size:13px}
+    table{width:100%;border-collapse:collapse;font-size:13px;table-layout:auto}
     th,td{padding:8px 10px;border-bottom:1px solid #2a3546;text-align:left;white-space:nowrap}
     th{position:sticky;top:0;background:#162034;z-index:1}
     
-    /* 🔹 Scrollable tables (both directions) */
+    /* 🔹 Scrollable tables */
     .scroll{
-      max-height:350px;      /* height limit */
-      overflow-y:auto;       /* vertical scroll */
-      overflow-x:auto;       /* horizontal scroll */
+      max-height:350px;
+      overflow-y:auto;
+      overflow-x:auto;
       border:1px solid #2a3546;
       border-radius:10px;
-      white-space:nowrap;    /* prevent wrapping */
     }
 
     /* 🔹 Custom slim scrollbar */
-    .scroll::-webkit-scrollbar {
-      width: 8px;   /* vertical */
-      height: 8px;  /* horizontal */
-    }
-    .scroll::-webkit-scrollbar-track {
-      background: #1c2635;
-      border-radius: 10px;
-    }
-    .scroll::-webkit-scrollbar-thumb {
-      background: #555;
-      border-radius: 10px;
-    }
-    .scroll::-webkit-scrollbar-thumb:hover {
-      background: #777;
-    }
+    .scroll::-webkit-scrollbar {height: 8px;width:8px;}
+    .scroll::-webkit-scrollbar-track {background: #1c2635;border-radius: 10px;}
+    .scroll::-webkit-scrollbar-thumb {background: #555;border-radius: 10px;}
+    .scroll::-webkit-scrollbar-thumb:hover {background: #777;}
 
     #map{height:360px;border-radius:12px;margin-top:8px}
     .footnote{margin-top:10px;color:#8fa2b5;text-align:center;font-size:12px}
@@ -130,6 +118,12 @@
     const toNum = s => (typeof s === 'number') ? s : (parseFloat(String(s||'0').replace(/[^0-9.\-]/g,'')) || 0);
     const norm = s => String(s||'').trim();
 
+    // 🔹 Shorten long names
+    function shortenName(name, maxLen = 40) {
+      if (!name) return "";
+      return name.length > maxLen ? name.substring(0, maxLen) + "..." : name;
+    }
+
     const COORDS = {
       "ANDHRA PRADESH":[15.91,79.74],"DELHI":[28.61,77.23],"MAHARASHTRA":[19.07,72.87],"GUJARAT":[22.3,70.8],
       "UTTAR PRADESH":[26.8,80.9],"TAMIL NADU":[13.08,80.27],"KARNATAKA":[12.97,77.59],"JAMMU AND KASHMIR":[33.78,76.57],
@@ -196,11 +190,11 @@
         options: { maintainAspectRatio:false, plugins:{ legend:{display:false}, tooltip:{callbacks:{ label:(ctx)=>{ const total = ctx.dataset.data.reduce((a,b)=>a+b,0); const pct = total ? ((ctx.raw/total)*100).toFixed(1):0; return `₹ ${ctx.raw.toFixed(2)} Cr (${pct}%)`; }}}}, cutout:'75%' }
       });
 
-      // Project Table
+      // 🔹 Project Table (shortened names + tooltip full name)
       const projectBody = document.querySelector('#projectTable tbody'); projectBody.innerHTML='';
       rows.forEach(r=>{
         const tr=document.createElement('tr');
-        tr.innerHTML=`<td>${r.project}</td><td>${r.amount.toFixed(2)}</td>`;
+        tr.innerHTML=`<td title="${r.project}">${shortenName(r.project, 40)}</td><td>${r.amount.toFixed(2)}</td>`;
         projectBody.appendChild(tr);
       });
 
