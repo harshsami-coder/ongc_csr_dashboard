@@ -31,13 +31,17 @@
     .panel h3{margin:0 0 10px;font-size:1rem;font-weight:700}
     select{appearance:none;padding:10px 12px;border-radius:10px;border:1px solid #2a3546;background:#182030;color:var(--ink);min-width:220px}
     .controls{display:flex;gap:10px;align-items:center;margin:8px 0 0 0}
+
+    /* Chart sizes */
     .chart-box{position:relative;height:320px}   /* bigger donut */
     .chart-box.tall{height:360px}
     canvas{max-width:100% !important}
+
     table{width:100%;border-collapse:collapse;font-size:13px}
     th,td{padding:8px 10px;border-bottom:1px solid #2a3546;text-align:left;white-space:nowrap}
     th{position:sticky;top:0;background:#162034;z-index:1}
     .scroll{max-height:300px;overflow:auto;border:1px solid #2a3546;border-radius:10px}
+
     #map{height:360px;border-radius:12px;margin-top:8px}
     .footnote{margin-top:10px;color:#8fa2b5;text-align:center;font-size:12px}
   </style>
@@ -120,13 +124,15 @@
       const COL_SECT  = parsed.meta.fields.find(h => h.toLowerCase().trim() === 'sector');
       const COL_AMT   = parsed.meta.fields.find(h => h.toLowerCase().includes('exp'));
 
-      // Build raw rows
-      const rawRows = parsed.data.map(r => ({
-        state: norm(r[COL_STATE]).toUpperCase(),
-        project: norm(r[COL_PROJ]),
-        sector: norm(r[COL_SECT]),
-        amount: toNum(r[COL_AMT])
-      }));
+      // Raw rows
+      const rawRows = parsed.data.map(r => {
+        const state  = norm(r[COL_STATE]).toUpperCase();
+        const proj   = norm(r[COL_PROJ]);
+        const sector = norm(r[COL_SECT]);
+        let amount   = toNum(r[COL_AMT]);
+        if (proj.toUpperCase().includes('BOLERO VAN') && amount >= 90) amount = 0.098;
+        return { state, project: proj, sector, amount };
+      });
 
       // KPIs
       const totalAmount   = rawRows.reduce((s,r)=>s+r.amount,0);
@@ -139,7 +145,7 @@
       document.getElementById('kpiEnv').textContent = fmtMoney(envTotal);
       document.getElementById('kpiEnvShare').textContent = `${envShare.toFixed(2)}%`;
 
-      // Expand rows for visuals
+      // Expanded rows
       const data = [];
       rawRows.forEach(r => {
         if (r.state.includes('&')) {
@@ -151,7 +157,7 @@
         }
       });
 
-      // Populate state filter
+      // State filter
       const stateSel = document.getElementById('stateSel');
       [...new Set(data.map(d=>d.state))].sort().forEach(st=>{
         const o=document.createElement('option'); o.value=st; o.textContent=st; stateSel.appendChild(o);
@@ -165,7 +171,7 @@
       map = L.map('map').setView([22.97,78.65], 5);
       L.tileLayer('https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png', { attribution:'&copy; OpenStreetMap &copy; CARTO' }).addTo(map);
 
-      // Initial render
+      // First render
       updateChartsAndTables(data);
     }
 
@@ -173,9 +179,8 @@
       // Sector totals
       const sectorTotals = {};
       rows.forEach(d => sectorTotals[d.sector] = (sectorTotals[d.sector]||0) + d.amount);
-      const total = Object.values(sectorTotals).reduce((a,b)=>a+b,0);
 
-      // Donut chart
+      // Donut chart with % share in legend
       if (sectorChart) sectorChart.destroy();
       sectorChart = new Chart(document.getElementById('sectorChart'), {
         type: 'doughnut',
@@ -183,38 +188,46 @@
           labels: Object.keys(sectorTotals),
           datasets: [{
             data: Object.values(sectorTotals),
-            backgroundColor: ['#00c2ff','#28c76f','#ea5455','#f7b731','#9b59b6',
-                              '#ff6b81','#54a0ff','#1dd1a1','#e17055','#ffeaa7',
-                              '#a29bfe','#ff9f43'],
+            backgroundColor: ['#00c2ff','#28c76f','#ea5455','#f7b731','#9b59b6','#ff6b81','#54a0ff','#1dd1a1','#e17055','#ffeaa7','#a29bfe','#ff9f43'],
             borderColor: '#0b1220', borderWidth: 3
           }]
         },
         options: {
-          responsive: true,
-          maintainAspectRatio: false,
-          plugins: {
-            legend: {
-              position: 'right',
-              labels: {
-                color: '#e8edf6',
+          maintainAspectRatio:false,
+          plugins:{
+            legend:{
+              display:true,
+              labels:{
+                color:'#e8edf6',
                 generateLabels: (chart) => {
                   const data = chart.data;
-                  return data.labels.map((label, i) => {
-                    const value = data.datasets[0].data[i];
+                  const dataset = data.datasets[0];
+                  const total = dataset.data.reduce((a,b)=>a+b,0);
+                  return data.labels.map((label,i)=>{
+                    const value = dataset.data[i];
                     const pct = total ? ((value/total)*100).toFixed(1) : 0;
                     return {
                       text: `${label} (${pct}%)`,
-                      fillStyle: data.datasets[0].backgroundColor[i],
-                      strokeStyle: '#0b1220',
-                      lineWidth: 2
+                      fillStyle: dataset.backgroundColor[i],
+                      strokeStyle: dataset.backgroundColor[i],
+                      hidden: isNaN(value) || value === 0,
+                      index: i
                     };
                   });
                 }
               }
             },
-            tooltip: { callbacks:{ label:(ctx)=>`${ctx.label}: ₹ ${ctx.raw.toFixed(2)} Cr` } }
+            tooltip:{
+              callbacks:{
+                label:(ctx)=>{
+                  const total = ctx.dataset.data.reduce((a,b)=>a+b,0);
+                  const pct = total ? ((ctx.raw/total)*100).toFixed(1) : 0;
+                  return `₹ ${ctx.raw.toFixed(2)} Cr (${pct}%)`;
+                }
+              }
+            }
           },
-          cutout: '55%'   // thicker ring
+          cutout:'60%'
         }
       });
 
