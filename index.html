@@ -1,4 +1,4 @@
-<!DOCTYPE html>
+<!DOCTYPE html> 
 <html lang="en">
 <head>
   <meta charset="UTF-8" />
@@ -51,6 +51,9 @@
     .scroll::-webkit-scrollbar-thumb:hover {background: #777;}
 
     #map{height:360px;border-radius:12px;margin-top:8px}
+
+    /* 🔹 Footer attribution */
+    footer{margin-top:16px;text-align:center;color:#9aa6b2;font-size:13px}
   </style>
 </head>
 <body>
@@ -80,7 +83,7 @@
         <div class="chart-box"><canvas id="sectorChart"></canvas></div>
       </div>
       <div class="panel">
-        <h3>CSR Projects (Table)</h3>
+        <h3>CSR Projects (Table) <small>(in crore)</small></h3>
         <div class="scroll">
           <table id="projectTable">
             <thead><tr><th>Project Name</th><th>Amount (₹ Cr)</th></tr></thead>
@@ -92,7 +95,7 @@
 
     <section class="row" style="margin-top:16px">
       <div class="panel">
-        <h3>CSR Spending by State (Table)</h3>
+        <h3>CSR Spending by State (Table) <small>(in crore)</small></h3>
         <div class="scroll">
           <table id="stateTable">
             <thead><tr><th>State / UT</th><th>Amount (₹ Cr)</th></tr></thead>
@@ -105,6 +108,10 @@
         <div id="map"></div>
       </div>
     </section>
+
+    <footer>
+      Made by <b>Harsh Raj</b>
+    </footer>
   </div>
 
   <script>
@@ -220,4 +227,3 @@
   </script>
 </body>
 </html>
-
