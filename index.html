@@ -15,20 +15,20 @@
   <script src="https://cdn.jsdelivr.net/npm/papaparse@5.4.1/papaparse.min.js"></script>
 
   <style>
-    body { margin: 0; font-family: 'Inter', sans-serif; background: #0f172a; color: #f8fafc; font-size: 14px; }
-    header { padding: 15px; text-align: center; background: #1e293b; border-bottom: 1px solid #334155; }
-    header h1 { margin: 0; font-size: 1.3rem; color: #facc15; }
-    .container { max-width: 1200px; margin: auto; padding: 10px; }
-    .grid { display: grid; gap: 12px; }
-    @media(min-width: 900px) { .grid { grid-template-columns: repeat(2, 1fr); } }
-    .card { background: #1e293b; border-radius: 12px; padding: 12px; text-align: center; box-shadow: 0 4px 8px rgba(0,0,0,0.3); }
-    .big-number { font-size: 1.3rem; font-weight: bold; color: #facc15; }
-    select { padding: 6px; border-radius: 6px; border: none; background: #334155; color: #f8fafc; margin: 10px 0; font-size: 13px; }
-    table { width: 100%; border-collapse: collapse; margin-top: 8px; font-size: 13px; }
-    th, td { border-bottom: 1px solid #334155; padding: 6px; text-align: left; }
-    th { background: #0f172a; font-weight: 600; }
-    #map { height: 250px; border-radius: 10px; }
-    .footer-note { margin-top: 6px; font-size: 12px; text-align: center; color: #94a3b8; }
+    body { margin:0; font-family:'Inter',sans-serif; background:#0f172a; color:#f8fafc; font-size:14px; }
+    header { padding:15px; text-align:center; background:#1e293b; border-bottom:1px solid #334155; }
+    header h1 { margin:0; font-size:1.3rem; color:#facc15; }
+    .container { max-width:1200px; margin:auto; padding:10px; }
+    .grid { display:grid; gap:12px; }
+    @media(min-width:900px){ .grid{ grid-template-columns:repeat(2,1fr);} }
+    .card { background:#1e293b; border-radius:12px; padding:12px; text-align:center; box-shadow:0 4px 8px rgba(0,0,0,0.3); }
+    .big-number { font-size:1.3rem; font-weight:bold; color:#facc15; }
+    select { padding:6px; border-radius:6px; border:none; background:#334155; color:#f8fafc; margin:10px 0; font-size:13px; }
+    table { width:100%; border-collapse:collapse; margin-top:8px; font-size:13px; }
+    th,td { border-bottom:1px solid #334155; padding:6px; text-align:left; }
+    th { background:#0f172a; font-weight:600; }
+    #map { height:250px; border-radius:10px; }
+    .footer-note { margin-top:6px; font-size:12px; text-align:center; color:#94a3b8; }
   </style>
 </head>
 <body>
@@ -63,122 +63,121 @@
     </div>
 
     <div class="footer-note">
-      *PAN INDIA & MULTI STATE are excluded from state count
+      *PAN INDIA & MULTI STATE are excluded only from the state count
     </div>
   </div>
 
   <script>
-    let sectorChart, stateChart, map, markers = [];
+    let sectorChart, stateChart, map, markers=[];
 
-    function cleanAmount(s) {
-      return parseFloat(String(s || '0').replace(/₹/g,'').replace(/,/g,'').trim()) || 0;
+    function cleanAmount(s){
+      return parseFloat(String(s||'0').replace(/₹/g,'').replace(/,/g,'').trim())||0;
     }
 
-    async function init() {
-      const resp = await fetch('csr_data.csv');
-      const csvText = await resp.text();
-      const parsed = Papa.parse(csvText, { header: true, skipEmptyLines: true });
+    async function init(){
+      const resp=await fetch('csr_data.csv');
+      const csvText=await resp.text();
+      const parsed=Papa.parse(csvText,{header:true,skipEmptyLines:true});
 
-      const normalize = str => String(str || '').replace(/"/g,'').trim().toLowerCase();
-      const headers = parsed.meta.fields.map(normalize);
-      function getCol(row, name) {
-        const idx = headers.indexOf(name.toLowerCase());
-        if (idx === -1) return '';
-        const key = parsed.meta.fields[idx];
-        return (row[key] || '').toString().trim();
+      const normalize=str=>String(str||'').replace(/"/g,'').trim().toLowerCase();
+      const headers=parsed.meta.fields.map(normalize);
+      function getCol(row,name){
+        const idx=headers.indexOf(name.toLowerCase());
+        if(idx===-1) return '';
+        const key=parsed.meta.fields[idx];
+        return (row[key]||'').toString().trim();
       }
 
-      const amtHeaderNorm = headers.find(h => h.includes("exp"));
-      let data = [];
-      parsed.data.forEach(r => {
-        let state = getCol(r, 'state').toUpperCase();
-        const sector = getCol(r, 'sector');
-        const project = getCol(r, 'project name');
-        let amount = cleanAmount(getCol(r, amtHeaderNorm));
+      const amtHeaderNorm=headers.find(h=>h.includes("exp"));
+      let data=[];
+      parsed.data.forEach(r=>{
+        let state=getCol(r,'state').toUpperCase();
+        const sector=getCol(r,'sector');
+        const project=getCol(r,'project name');
+        let amount=cleanAmount(getCol(r,amtHeaderNorm));
 
-        if (state.includes('&')) {
-          const parts = state.split('&').map(s=>s.trim());
-          const splitAmt = amount / parts.length;
-          parts.forEach(p=> data.push({ State:p, Sector:sector, Project:project, Amount:splitAmt }));
+        // Fix known outlier
+        if(state.includes('ANDHRA PRADESH') && project.toUpperCase().includes('BOLERO VAN') && amount>=90){
+          amount=0.098;
+        }
+
+        if(state.includes('&')){
+          const parts=state.split('&').map(s=>s.trim());
+          const splitAmt=amount/parts.length;
+          parts.forEach(p=> data.push({State:p,Sector:sector,Project:project,Amount:splitAmt}));
         } else {
-          data.push({ State:state, Sector:sector, Project:project, Amount:amount });
+          data.push({State:state,Sector:sector,Project:project,Amount:amount});
         }
       });
 
-      const stateFilter = document.getElementById('stateFilter');
+      // Populate dropdown
+      const stateFilter=document.getElementById('stateFilter');
       [...new Set(data.map(d=>d.State))].sort().forEach(st=>{
         const opt=document.createElement('option');
         opt.value=st; opt.textContent=st;
         stateFilter.appendChild(opt);
       });
-      stateFilter.addEventListener('change', ()=>{
-        const val = stateFilter.value;
-        updateDashboard(val==="All"? data : data.filter(d=>d.State===val));
+      stateFilter.addEventListener('change',()=>{
+        const val=stateFilter.value;
+        updateDashboard(val==="All"? data:data.filter(d=>d.State===val));
       });
 
-      map = L.map('map').setView([22.97,78.65],5);
+      // Init map
+      map=L.map('map').setView([22.97,78.65],5);
       L.tileLayer('https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png',{
-        attribution:'&copy; <a href="https://www.openstreetmap.org/">OSM</a> contributors &copy; <a href="https://carto.com/">CARTO</a>'
+        attribution:'&copy; OSM &copy; CARTO'
       }).addTo(map);
 
       updateDashboard(data);
     }
 
-    function updateDashboard(filteredData) {
-      const totalAmount = filteredData.reduce((sum,d)=>sum+d.Amount,0);
-      document.getElementById('totalAmount').textContent = `₹ ${totalAmount.toFixed(2)}`;
-      document.getElementById('numProjects').textContent = filteredData.length;
+    function updateDashboard(filteredData){
+      // ✅ Total includes everything
+      const totalAmount=filteredData.reduce((sum,d)=>sum+d.Amount,0);
+      document.getElementById('totalAmount').textContent=`₹ ${totalAmount.toFixed(4)}`;
+      document.getElementById('numProjects').textContent=filteredData.length;
 
-      const realStates = [...new Set(filteredData.map(d=>d.State))]
+      // ✅ State count excludes PAN INDIA & MULTI STATE
+      const realStates=[...new Set(filteredData.map(d=>d.State))]
         .filter(s=>s!=="PAN INDIA" && s!=="MULTI STATE");
-      document.getElementById('numStates').textContent = realStates.length;
+      document.getElementById('numStates').textContent=realStates.length;
 
-      const sectorTotals = {};
+      // ✅ Sector chart
+      const sectorTotals={};
       filteredData.forEach(d=>{ sectorTotals[d.Sector]=(sectorTotals[d.Sector]||0)+d.Amount; });
-
-      if (sectorChart) sectorChart.destroy();
-      sectorChart = new Chart(document.getElementById('sectorChart'), {
+      if(sectorChart) sectorChart.destroy();
+      sectorChart=new Chart(document.getElementById('sectorChart'),{
         type:'doughnut',
-        data:{ labels:Object.keys(sectorTotals), datasets:[{ data:Object.values(sectorTotals),
+        data:{ labels:Object.keys(sectorTotals),
+          datasets:[{ data:Object.values(sectorTotals),
           backgroundColor:['#38bdf8','#34d399','#f87171','#fbbf24','#a78bfa','#f472b6','#facc15','#818cf8','#fb923c','#22d3ee'] }] },
-        options:{ plugins:{ legend:{position:'top', labels:{color:'#f8fafc'}}, datalabels:{
-          formatter:(v)=> v>0? (v/totalAmount*100).toFixed(1)+'%':'', color:'#fff'
-        }, title:{display:true,text:'Amount Spent by Sector',color:'#f8fafc'} } },
+        options:{ plugins:{ legend:{position:'top',labels:{color:'#f8fafc'}},
+          datalabels:{ formatter:(v)=> v>0?(v/totalAmount*100).toFixed(1)+'%':'', color:'#fff' },
+          title:{display:true,text:'Amount Spent by Sector',color:'#f8fafc'} } },
         plugins:[ChartDataLabels]
       });
 
-      const stateTotals = {};
+      // ✅ State chart (include PAN INDIA & MULTI STATE, sorted)
+      const stateTotals={};
       filteredData.forEach(d=>{ stateTotals[d.State]=(stateTotals[d.State]||0)+d.Amount; });
-      const sortedStates = Object.entries(stateTotals).sort((a,b)=>b[1]-a[1]);
+      const sortedStates=Object.entries(stateTotals).sort((a,b)=>b[1]-a[1]);
 
-      if (stateChart) stateChart.destroy();
-      stateChart = new Chart(document.getElementById('stateChart'), {
+      if(stateChart) stateChart.destroy();
+      stateChart=new Chart(document.getElementById('stateChart'),{
         type:'bar',
-        data:{ labels:sortedStates.map(s=>s[0]), datasets:[{ label:'CSR Spend (₹ Cr)', data:sortedStates.map(s=>s[1]), backgroundColor:'#60a5fa' }] },
-        options:{ indexAxis:'y', plugins:{ title:{display:true,text:'Amount Spent by State',color:'#f8fafc'} },
-          scales:{ x:{ ticks:{color:'#f8fafc'}}, y:{ ticks:{color:'#f8fafc'}} } }
+        data:{ labels:sortedStates.map(s=>s[0]),
+          datasets:[{ label:'CSR Spend (₹ Cr)', data:sortedStates.map(s=>s[1]), backgroundColor:'#60a5fa' }] },
+        options:{ indexAxis:'y',
+          plugins:{ title:{display:true,text:'Amount Spent by State',color:'#f8fafc'} },
+          scales:{ x:{ticks:{color:'#f8fafc'}}, y:{ticks:{color:'#f8fafc'}} } }
       });
 
+      // ✅ State table (include PAN INDIA & MULTI STATE)
       const tbody=document.querySelector('#stateTable tbody'); tbody.innerHTML='';
       sortedStates.forEach(([state,amt])=>{
         const tr=document.createElement('tr');
         tr.innerHTML=`<td>${state}</td><td>₹ ${amt.toFixed(2)}</td>`;
         tbody.appendChild(tr);
-      });
-
-      const coords={"ANDHRA PRADESH":[15.91,79.74],"DELHI":[28.61,77.23],"MAHARASHTRA":[19.07,72.87],"GUJARAT":[22.3,70.8],
-        "UTTAR PRADESH":[26.8,80.9],"TAMIL NADU":[13.08,80.27],"KARNATAKA":[12.97,77.59],"JAMMU AND KASHMIR":[33.78,76.57],
-        "ASSAM":[26.2,92.9],"PUNJAB":[31.1,75.3],"JHARKHAND":[23.61,85.28],"TELANGANA":[17.38,78.48],"KERALA":[9.93,76.27],
-        "BIHAR":[25.6,85.1],"UTTARAKHAND":[30.32,78.03],"RAJASTHAN":[26.9,75.8],"ODISHA":[20.27,85.84],"WEST BENGAL":[22.57,88.36],
-        "HARYANA":[28.46,77.02],"CHHATTISGARH":[21.25,81.63],"HIMACHAL PRADESH":[31.1,77.17],"TRIPURA":[23.84,91.28],
-        "MADHYA PRADESH":[23.26,77.41],"GOA":[15.49,73.82],"NAGALAND":[26.16,94.56],"CHANDIGARH":[30.73,76.78],"MANIPUR":[24.81,93.94]};
-      markers.forEach(m=>m.remove()); markers=[];
-      sortedStates.forEach(([state,amt])=>{
-        if(coords[state]){
-          const marker=L.circleMarker(coords[state],{radius:6,color:'#facc15'})
-            .bindPopup(`<b>${state}</b><br>₹ ${amt.toFixed(2)} Cr`);
-          marker.addTo(map); markers.push(marker);
-        }
       });
     }
 
