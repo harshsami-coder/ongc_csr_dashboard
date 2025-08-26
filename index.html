@@ -30,6 +30,7 @@
     th { background:#0f172a; font-weight:600; position:sticky; top:0; }
     .scroll-table { max-height:250px; overflow-y:auto; display:block; }
     #map { height:300px; border-radius:10px; }
+    #sectorChart, #stateChart { max-height:200px; } /* shrink charts */
     .footer-note { margin-top:6px; font-size:12px; text-align:center; color:#94a3b8; }
   </style>
 </head>
@@ -74,54 +75,36 @@
   <script>
     let sectorChart, stateChart, map, markers=[];
 
-    const currency = n => `₹ ${n.toFixed(2)}`;
-    function cleanAmount(s){
-      return parseFloat(String(s||'0').replace(/₹/g,'').replace(/,/g,'').trim())||0;
-    }
+    function cleanAmount(s){ return parseFloat(String(s||'0').replace(/₹/g,'').replace(/,/g,'').trim())||0; }
 
     async function init(){
       const resp=await fetch('csr_data.csv');
       const csvText=await resp.text();
       const parsed=Papa.parse(csvText,{header:true,skipEmptyLines:true});
-
       const normalize=str=>String(str||'').replace(/"/g,'').trim().toLowerCase();
       const headers=parsed.meta.fields.map(normalize);
-      const getCol=(row,name)=>{
-        const idx=headers.indexOf(name.toLowerCase());
-        if(idx===-1) return '';
-        const key=parsed.meta.fields[idx];
-        return (row[key]||'').toString().trim();
-      };
+      function getCol(row,name){ const idx=headers.indexOf(name.toLowerCase()); if(idx===-1) return ''; const key=parsed.meta.fields[idx]; return (row[key]||'').toString().trim(); }
 
       const amtHeaderNorm=headers.find(h=>h.includes("exp"));
-      if(!amtHeaderNorm){ alert('Could not find "Exp (INR Crore)" column.'); return; }
 
-      // ---------- BUILD RAW ROWS (un-split) WITH OUTLIER FIX ----------
-      const rawRows = parsed.data.map(r=>{
-        const State = getCol(r,'state').toUpperCase();
-        const Sector = getCol(r,'sector');
-        const Project = getCol(r,'project name').toUpperCase();
-        let Amount = cleanAmount(getCol(r,amtHeaderNorm));
+      // raw total from original CSV (un-split)
+      let rawTotal=parsed.data.reduce((sum,r)=>{
+        return sum+cleanAmount(getCol(r,amtHeaderNorm));
+      },0);
 
-        // Fix the known outlier (98.xx -> 0.098) BEFORE any totals
-        if (State.includes('ANDHRA PRADESH') && Project.includes('BOLERO VAN') && Amount >= 90){
-          Amount = 0.098;
-        }
-        return {State, Sector, Project, Amount};
-      });
-
-      // ---------- RAW TOTAL FROM UNSPLIT ROWS ----------
-      const rawTotal = rawRows.reduce((s,d)=>s + (isNaN(d.Amount)?0:d.Amount), 0);
-
-      // ---------- EXPANDED DATASET FOR VISUALS ----------
-      const expandedData = [];
-      rawRows.forEach(d=>{
-        if(d.State.includes('&')){
-          const parts = d.State.split('&').map(x=>x.trim());
-          const split = d.Amount / parts.length;
-          parts.forEach(p => expandedData.push({State:p, Sector:d.Sector, Project:d.Project, Amount:split}));
+      // expanded dataset for charts/maps
+      let expandedData=[];
+      parsed.data.forEach(r=>{
+        let state=getCol(r,'state').toUpperCase();
+        const sector=getCol(r,'sector');
+        const project=getCol(r,'project name');
+        let amount=cleanAmount(getCol(r,amtHeaderNorm));
+        if(state.includes('&')){
+          const parts=state.split('&').map(s=>s.trim());
+          const splitAmt=amount/parts.length;
+          parts.forEach(p=>expandedData.push({State:p,Sector:sector,Project:project,Amount:splitAmt}));
         } else {
-          expandedData.push({...d});
+          expandedData.push({State:state,Sector:sector,Project:project,Amount:amount});
         }
       });
 
@@ -132,86 +115,69 @@
       });
       stateFilter.addEventListener('change',()=>{
         const val=stateFilter.value;
-        updateDashboard(val==="All"? expandedData : expandedData.filter(d=>d.State===val), rawTotal);
+        updateDashboard(val==="All"? expandedData:expandedData.filter(d=>d.State===val),rawTotal);
       });
 
-      // map
+      // map init
       map=L.map('map').setView([22.97,78.65],5);
       L.tileLayer('https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png',{ attribution:'&copy; OSM &copy; CARTO' }).addTo(map);
 
-      updateDashboard(expandedData, rawTotal);
+      updateDashboard(expandedData,rawTotal);
     }
 
-    function updateDashboard(filteredData, rawTotal){
-      // KPI cards
-      document.getElementById('totalAmount').textContent = `₹ ${rawTotal.toFixed(4)}`;
-      document.getElementById('numProjects').textContent = filteredData.length;
+    function updateDashboard(filteredData,rawTotal){
+      // KPIs
+      document.getElementById('totalAmount').textContent=`₹ ${rawTotal.toFixed(4)}`;
+      document.getElementById('numProjects').textContent=filteredData.length;
 
-      const realStates=[...new Set(filteredData.map(d=>d.State))]
-        .filter(s=>s!=="PAN INDIA" && s!=="MULTI STATE");
-      document.getElementById('numStates').textContent = realStates.length;
+      const realStates=[...new Set(filteredData.map(d=>d.State))].filter(s=>s!=="PAN INDIA" && s!=="MULTI STATE");
+      document.getElementById('numStates').textContent=realStates.length;
 
-      // ----- Sector doughnut (legend removed) -----
-      const sectorTotals={};
-      filteredData.forEach(d=>{ sectorTotals[d.Sector]=(sectorTotals[d.Sector]||0)+d.Amount; });
+      // sector chart
+      const sectorTotals={}; filteredData.forEach(d=>{ sectorTotals[d.Sector]=(sectorTotals[d.Sector]||0)+d.Amount; });
       if(sectorChart) sectorChart.destroy();
       sectorChart=new Chart(document.getElementById('sectorChart'),{
         type:'doughnut',
-        data:{
-          labels:Object.keys(sectorTotals),
-          datasets:[{ data:Object.values(sectorTotals),
-            backgroundColor:['#38bdf8','#34d399','#f87171','#fbbf24','#a78bfa','#f472b6','#facc15','#818cf8','#fb923c','#22d3ee'] }]
-        },
-        options:{
-          plugins:{
-            legend:{ display:false },           // <- remove the legend chips
-            tooltip:{ callbacks:{ label:(ctx)=> `${currency(ctx.raw)} Cr` } } // no percent, show value
-          },
-          cutout:'60%'
-        }
+        data:{ labels:Object.keys(sectorTotals), datasets:[{ data:Object.values(sectorTotals),
+          backgroundColor:['#38bdf8','#34d399','#f87171','#fbbf24','#a78bfa','#f472b6','#facc15','#818cf8','#fb923c','#22d3ee'] }] },
+        options:{ maintainAspectRatio:false, cutout:'60%',
+          plugins:{ legend:{display:false}, tooltip:{callbacks:{label:(ctx)=>`${ctx.label}: ₹ ${ctx.raw.toFixed(2)} Cr`}} } }
       });
 
-      // ----- State bar (descending) -----
-      const stateTotals={};
-      filteredData.forEach(d=>{ stateTotals[d.State]=(stateTotals[d.State]||0)+d.Amount; });
+      // state chart
+      const stateTotals={}; filteredData.forEach(d=>{ stateTotals[d.State]=(stateTotals[d.State]||0)+d.Amount; });
       const sortedStates=Object.entries(stateTotals).sort((a,b)=>b[1]-a[1]);
       if(stateChart) stateChart.destroy();
       stateChart=new Chart(document.getElementById('stateChart'),{
         type:'bar',
-        data:{ labels:sortedStates.map(s=>s[0]),
-          datasets:[{ label:'CSR Spend (₹ Cr)', data:sortedStates.map(s=>s[1]), backgroundColor:'#60a5fa' }] },
-        options:{
-          indexAxis:'y',
-          plugins:{ legend:{display:false}, tooltip:{callbacks:{label:(ctx)=> `${currency(ctx.raw)} Cr`}} },
-          scales:{ x:{ticks:{color:'#f8fafc'}}, y:{ticks:{color:'#f8fafc'}} }
-        }
+        data:{ labels:sortedStates.map(s=>s[0]), datasets:[{ label:'CSR Spend (₹ Cr)', data:sortedStates.map(s=>s[1]), backgroundColor:'#60a5fa' }] },
+        options:{ indexAxis:'y', maintainAspectRatio:false,
+          plugins:{ legend:{display:false}, tooltip:{callbacks:{label:(ctx)=>`₹ ${ctx.raw.toFixed(2)}`}} },
+          scales:{ x:{ticks:{color:'#f8fafc'}}, y:{ticks:{color:'#f8fafc'}} } }
       });
 
-      // ----- Table (same order as chart) -----
+      // table
       const tbody=document.querySelector('#stateTable tbody'); tbody.innerHTML='';
       sortedStates.forEach(([state,amt])=>{
         const tr=document.createElement('tr');
-        tr.innerHTML=`<td>${state}</td><td>${currency(amt)}</td>`;
+        tr.innerHTML=`<td>${state}</td><td>₹ ${amt.toFixed(2)}</td>`;
         tbody.appendChild(tr);
       });
 
-      // ----- Map bubbles -----
-      const coords={
-        "ANDHRA PRADESH":[15.91,79.74],"DELHI":[28.61,77.23],"MAHARASHTRA":[19.07,72.87],"GUJARAT":[22.3,70.8],
+      // map markers
+      const coords={"ANDHRA PRADESH":[15.91,79.74],"DELHI":[28.61,77.23],"MAHARASHTRA":[19.07,72.87],"GUJARAT":[22.3,70.8],
         "UTTAR PRADESH":[26.8,80.9],"TAMIL NADU":[13.08,80.27],"KARNATAKA":[12.97,77.59],"JAMMU AND KASHMIR":[33.78,76.57],
         "ASSAM":[26.2,92.9],"PUNJAB":[31.1,75.3],"JHARKHAND":[23.61,85.28],"TELANGANA":[17.38,78.48],"KERALA":[9.93,76.27],
         "BIHAR":[25.6,85.1],"UTTARAKHAND":[30.32,78.03],"RAJASTHAN":[26.9,75.8],"ODISHA":[20.27,85.84],"WEST BENGAL":[22.57,88.36],
         "HARYANA":[28.46,77.02],"CHHATTISGARH":[21.25,81.63],"HIMACHAL PRADESH":[31.1,77.17],"TRIPURA":[23.84,91.28],
         "MADHYA PRADESH":[23.26,77.41],"GOA":[15.49,73.82],"NAGALAND":[26.16,94.56],"CHANDIGARH":[30.73,76.78],
-        "MANIPUR":[24.81,93.94],"PAN INDIA":[22.97,78.65],"MULTI STATE":[21,82]
-      };
+        "MANIPUR":[24.81,93.94],"PAN INDIA":[22.97,78.65],"MULTI STATE":[21,82]};
       markers.forEach(m=>m.remove()); markers=[];
       Object.entries(stateTotals).forEach(([state,amt])=>{
         if(coords[state]){
-          const radius = Math.max(4, Math.sqrt(amt)*2);
-          const marker=L.circleMarker(coords[state],{radius,color:'#facc15',fillColor:'#facc15',fillOpacity:0.6});
-          marker.bindPopup(`<b>${state}</b><br>${currency(amt)} Cr`);
-          marker.addTo(map); markers.push(marker);
+          const radius=Math.sqrt(amt)*2;
+          const marker=L.circleMarker(coords[state],{radius:radius,color:'#facc15',fillColor:'#facc15',fillOpacity:0.6});
+          marker.bindPopup(`<b>${state}</b><br>₹ ${amt.toFixed(2)} Cr`); marker.addTo(map); markers.push(marker);
         }
       });
     }
