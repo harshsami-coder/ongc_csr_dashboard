@@ -97,7 +97,7 @@
 
       const amtHeaderNorm=headers.find(h=>h.includes("exp"));
       let expandedData=[];
-      let rawRows=0, rawTotal=0;
+      let rawTotal=0;
 
       parsed.data.forEach(r=>{
         let state=getCol(r,'state').toUpperCase();
@@ -105,8 +105,7 @@
         const project=getCol(r,'project name');
         let amount=cleanAmount(getCol(r,amtHeaderNorm));
 
-        rawTotal+=amount;  // correct total from CSV
-        rawRows++;
+        rawTotal+=amount;  // CORRECT: total only from raw CSV
 
         if(state.includes('&')){
           const parts=state.split('&').map(s=>s.trim());
@@ -152,7 +151,8 @@
         type:'doughnut',
         data:{ labels:Object.keys(sectorTotals), datasets:[{ data:Object.values(sectorTotals),
           backgroundColor:['#38bdf8','#34d399','#f87171','#fbbf24','#a78bfa','#f472b6','#facc15','#818cf8','#fb923c','#22d3ee'] }] },
-        options:{ plugins:{ legend:{display:false}, tooltip:{callbacks:{label:(ctx)=>`${ctx.label}: ₹ ${ctx.raw.toFixed(2)}`}} } }
+        options:{ aspectRatio:1.2, cutout:'65%',
+          plugins:{ legend:{display:false}, tooltip:{callbacks:{label:(ctx)=>`${ctx.label}: ₹ ${ctx.raw.toFixed(2)}`}} } }
       });
 
       // state chart
