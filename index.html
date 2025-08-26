@@ -27,6 +27,7 @@
     th { background: #0f172a; }
     #map { height: 400px; border-radius: 10px; }
     select { padding: 8px; border-radius: 6px; border: none; background: #334155; color: #f8fafc; margin-bottom: 15px; }
+    .note { margin-top: 10px; font-size: 0.9rem; color: #cbd5e1; }
   </style>
 </head>
 <body>
@@ -43,6 +44,7 @@
 
     <h3>Filter by State:</h3>
     <select id="stateFilter"><option value="All">All States</option></select>
+    <div class="note" id="dqNote"></div>
 
     <div class="grid">
       <div class="card"><canvas id="sectorChart"></canvas></div>
@@ -66,117 +68,85 @@
     let sectorChart, stateChart, gaugeChart;
     let map, markers = [];
 
+    function cleanAmount(s) {
+      return parseFloat(String(s || '0')
+        .replace(/₹/g, '')
+        .replace(/,/g, '')
+        .trim()
+      ) || 0;
+    }
+
     async function init() {
       const resp = await fetch('csr_data.csv');
       const csvText = await resp.text();
 
-      // Parse CSV with PapaParse
+      // Parse CSV robustly
       const parsed = Papa.parse(csvText, { header: true, skipEmptyLines: true });
 
       // Normalize headers
-      const normalize = str => str.replace(/"/g, '').trim().toLowerCase();
+      const normalize = str => String(str || '').replace(/"/g, '').trim().toLowerCase();
       const headers = parsed.meta.fields.map(normalize);
 
       function getCol(row, name) {
         const idx = headers.indexOf(name.toLowerCase());
         if (idx === -1) return '';
         const key = parsed.meta.fields[idx];
-        return (row[key] || '').trim();
+        return (row[key] || '').toString().trim();
       }
 
       const rows = parsed.data;
 
-      // Find actual amount column (handles "Exp\n(INR Crore)")
-      const amountHeader = headers.find(h => h.includes("exp"));
-
-      const allData = rows.map(r => ({
-        State: getCol(r, 'state'),
-        Sector: getCol(r, 'sector'),
-        Project: getCol(r, 'project name'),
-        Amount: parseFloat(
-          (getCol(r, amountHeader) || '0')
-            .replace(/₹/g, '')
-            .replace(/,/g, '')
-            .trim()
-        ) || 0
-      }));
-
-      function updateDashboard(filteredData) {
-        const totalAmount = filteredData.reduce((sum, d) => sum + d.Amount, 0);
-        document.getElementById('numProjects').textContent = filteredData.length;
-        document.getElementById('numStates').textContent = new Set(filteredData.map(d => d.State)).size;
-
-        // Gauge chart
-        if (gaugeChart) gaugeChart.destroy();
-        gaugeChart = new Chart(document.getElementById('gaugeChart'), {
-          type: 'doughnut',
-          data: { labels: ['Spent','Remaining'],
-            datasets: [{ data: [totalAmount, Math.max(0,2000-totalAmount)],
-              backgroundColor: ['#38bdf8','#334155'], cutout:'70%', circumference: 180, rotation: 270 }] },
-          options: { plugins:{ legend:{display:false}, tooltip:{enabled:false}, title:{display:true,text:`₹ ${totalAmount.toFixed(2)}`,color:'#facc15'} } }
-        });
-
-        // Sector totals
-        const sectorTotals = {};
-        filteredData.forEach(d => { sectorTotals[d.Sector] = (sectorTotals[d.Sector]||0)+d.Amount; });
-
-        if (sectorChart) sectorChart.destroy();
-        sectorChart = new Chart(document.getElementById('sectorChart'), {
-          type: 'doughnut',
-          data: { labels: Object.keys(sectorTotals), datasets: [{ data: Object.values(sectorTotals),
-            backgroundColor: ['#38bdf8','#34d399','#f87171','#fbbf24','#a78bfa','#f472b6'] }] },
-          options: { plugins: { title: { display: true, text: 'Amount Spent by Sector', color:'#f8fafc' } } }
-        });
-
-        // State totals
-        const stateTotals = {};
-        filteredData.forEach(d => { stateTotals[d.State] = (stateTotals[d.State]||0)+d.Amount; });
-
-        if (stateChart) stateChart.destroy();
-        stateChart = new Chart(document.getElementById('stateChart'), {
-          type: 'bar',
-          data: { labels: Object.keys(stateTotals), datasets: [{ label: 'CSR Spend (₹ Cr)', data: Object.values(stateTotals), backgroundColor: '#60a5fa' }] },
-          options: { plugins: { title: { display: true, text: 'Amount Spent by State', color:'#f8fafc' } },
-            scales: { x: { ticks: { color:'#f8fafc' }}, y: { ticks: { color:'#f8fafc' }} }
-          }
-        });
-
-        // Table
-        const tbody = document.querySelector('#stateTable tbody');
-        tbody.innerHTML = '';
-        Object.entries(stateTotals).forEach(([state, amt])=>{
-          const tr = document.createElement('tr');
-          tr.innerHTML = `<td>${state}</td><td>₹ ${amt.toFixed(2)}</td>`;
-          tbody.appendChild(tr);
-        });
-
-        // Map
-        markers.forEach(m => m.remove());
-        markers = [];
-        Object.entries(stateTotals).forEach(([state, amt])=>{
-          const coords = {
-            "Andhra Pradesh":[15.91,79.74],"Delhi":[28.61,77.23],"Maharashtra":[19.07,72.87],"Gujarat":[22.3,70.8],
-            "Uttar Pradesh":[26.8,80.9],"Tamil Nadu":[13.08,80.27],"Karnataka":[12.97,77.59]
-          };
-          if(coords[state]) {
-            const marker = L.circleMarker(coords[state],{radius:8,color:'#facc15'})
-              .bindPopup(`<b>${state}</b><br>₹ ${amt.toFixed(2)} Cr`);
-            marker.addTo(map);
-            markers.push(marker);
-          }
-        });
+      // Find actual amount header (handles "Exp\n(INR Crore)")
+      const amtHeaderNorm = headers.find(h => h.includes("exp"));
+      if (!amtHeaderNorm) {
+        alert('Could not find amount column (Exp (INR Crore)) in CSV.');
+        return;
       }
 
-      // Dropdown
+      // Build raw data
+      let data = rows.map(r => ({
+        State: getCol(r, 'state').toUpperCase(),
+        Sector: getCol(r, 'sector'),
+        Project: getCol(r, 'project name'),
+        Amount: cleanAmount(getCol(r, amtHeaderNorm))
+      }));
+
+      // ---- Data quality correction (focused, minimal) ----
+      // If you want to remove this correction, just delete this block.
+      const corrections = [
+        {
+          when: d =>
+            d.State.includes('ANDHRA PRADESH') &&
+            d.Project.toUpperCase().includes('BOLERO VAN') &&
+            d.Amount >= 90, // obvious outlier for a vehicle
+          fix: 0.098 // 9.8 lakh as ₹0.098 Cr
+        }
+      ];
+      let corrected = false;
+      data = data.map(d => {
+        for (const rule of corrections) {
+          if (rule.when(d)) { d.Amount = rule.fix; corrected = true; break; }
+        }
+        return d;
+      });
+
+      // Show a small note if correction applied
+      const dqNote = document.getElementById('dqNote');
+      dqNote.textContent = corrected
+        ? 'Note: Detected and corrected an outlier entry (Andhra Pradesh – Bolero Van). Amount set to ₹ 0.098 Cr.'
+        : '';
+
+      // Populate dropdown
       const stateFilter = document.getElementById('stateFilter');
-      [...new Set(allData.map(d => d.State))].forEach(st=>{
+      [...new Set(data.map(d => d.State))].sort().forEach(st=>{
         const opt=document.createElement('option');
         opt.value=st; opt.textContent=st;
         stateFilter.appendChild(opt);
       });
+
       stateFilter.addEventListener('change',()=>{
         const val = stateFilter.value;
-        updateDashboard(val==="All"? allData : allData.filter(d=>d.State===val));
+        updateDashboard(val==="All"? data : data.filter(d=>d.State===val));
       });
 
       // Map init
@@ -185,8 +155,80 @@
         attribution: '&copy; OpenStreetMap contributors'
       }).addTo(map);
 
-      // Run once
-      updateDashboard(allData);
+      // First render
+      updateDashboard(data);
+    }
+
+    function updateDashboard(filteredData) {
+      const totalAmount = filteredData.reduce((sum, d) => sum + d.Amount, 0);
+      document.getElementById('numProjects').textContent = filteredData.length;
+      document.getElementById('numStates').textContent = new Set(filteredData.map(d => d.State)).size;
+
+      // Gauge chart
+      if (gaugeChart) gaugeChart.destroy();
+      gaugeChart = new Chart(document.getElementById('gaugeChart'), {
+        type: 'doughnut',
+        data: { labels: ['Spent','Remaining'],
+          datasets: [{ data: [totalAmount, Math.max(0,2000-totalAmount)],
+            backgroundColor: ['#38bdf8','#334155'], cutout:'70%', circumference: 180, rotation: 270 }] },
+        options: { plugins:{ legend:{display:false}, tooltip:{enabled:false}, title:{display:true,text:`₹ ${totalAmount.toFixed(4)}`,color:'#facc15'} } }
+      });
+
+      // Sector totals
+      const sectorTotals = {};
+      filteredData.forEach(d => { sectorTotals[d.Sector] = (sectorTotals[d.Sector]||0)+d.Amount; });
+
+      if (sectorChart) sectorChart.destroy();
+      sectorChart = new Chart(document.getElementById('sectorChart'), {
+        type: 'doughnut',
+        data: { labels: Object.keys(sectorTotals), datasets: [{ data: Object.values(sectorTotals),
+          backgroundColor: ['#38bdf8','#34d399','#f87171','#fbbf24','#a78bfa','#f472b6'] }] },
+        options: { plugins: { title: { display: true, text: 'Amount Spent by Sector', color:'#f8fafc' } } }
+      });
+
+      // State totals
+      const stateTotals = {};
+      filteredData.forEach(d => { stateTotals[d.State] = (stateTotals[d.State]||0)+d.Amount; });
+
+      if (stateChart) stateChart.destroy();
+      stateChart = new Chart(document.getElementById('stateChart'), {
+        type: 'bar',
+        data: { labels: Object.keys(stateTotals), datasets: [{ label: 'CSR Spend (₹ Cr)', data: Object.values(stateTotals), backgroundColor: '#60a5fa' }] },
+        options: { plugins: { title: { display: true, text: 'Amount Spent by State', color:'#f8fafc' } },
+          scales: { x: { ticks: { color:'#f8fafc' }}, y: { ticks: { color:'#f8fafc' }} }
+        }
+      });
+
+      // Table
+      const tbody = document.querySelector('#stateTable tbody');
+      tbody.innerHTML = '';
+      Object.entries(stateTotals).forEach(([state, amt])=>{
+        const tr = document.createElement('tr');
+        tr.innerHTML = `<td>${state}</td><td>₹ ${amt.toFixed(2)}</td>`;
+        tbody.appendChild(tr);
+      });
+
+      // Map (basic coords; expand later if you want all states)
+      const coords = {
+        "ANDHRA PRADESH":[15.91,79.74],"DELHI":[28.61,77.23],"MAHARASHTRA":[19.07,72.87],"GUJARAT":[22.3,70.8],
+        "UTTAR PRADESH":[26.8,80.9],"TAMIL NADU":[13.08,80.27],"KARNATAKA":[12.97,77.59],
+        "JAMMU AND KASHMIR":[33.78,76.57],"ASSAM":[26.2,92.9],"PUNJAB":[31.1,75.3],
+        "JHARKHAND":[23.61,85.28],"TELANGANA":[17.38,78.48],"KERALA":[9.93,76.27],
+        "BIHAR":[25.6,85.1],"UTTARAKHAND":[30.32,78.03],"RAJASTHAN":[26.9,75.8],
+        "ODISHA":[20.27,85.84],"WEST BENGAL":[22.57,88.36],"HARYANA":[28.46,77.02],
+        "CHHATTISGARH":[21.25,81.63],"HIMACHAL PRADESH":[31.1,77.17],"TRIPURA":[23.84,91.28],
+        "KERALA":[9.93,76.27],"TELANGANA":[17.38,78.48],"MADHYA PRADESH":[23.26,77.41]
+      };
+      markers.forEach(m => m.remove());
+      markers = [];
+      Object.entries(stateTotals).forEach(([state, amt])=>{
+        if (coords[state]) {
+          const marker = L.circleMarker(coords[state],{radius:8,color:'#facc15'})
+            .bindPopup(`<b>${state}</b><br>₹ ${amt.toFixed(2)} Cr`);
+          marker.addTo(map);
+          markers.push(marker);
+        }
+      });
     }
 
     init().catch(err => { console.error(err); alert('Error loading data'); });
